@@ -4,7 +4,9 @@ import type { CapabilityManifest } from '../domain/types.js';
 export class ManifestError extends Error {}
 
 const hostname = z.string().min(1).transform((h) => h.toLowerCase()).refine((h) => h === '*' || /^[a-z0-9.-]+$/.test(h), 'invalid hostname');
-const fsPath = z.string().min(1).transform((p) => (p.startsWith('~') ? '/home/tool' + p.slice(1) : p)).refine((p) => p === '*' || p.startsWith('/'), 'path must be absolute or *');
+const fsPath = z.string().min(1).transform((p) => (p.startsWith('~') ? '/home/tool' + p.slice(1) : p))
+  .refine((p) => p === '*' || p.startsWith('/'), 'path must be absolute or *')
+  .refine((p) => !p.split('/').includes('..'), 'path traversal not allowed');
 
 export const manifestSchema = z.object({
   schemaVersion: z.literal('1.0'),

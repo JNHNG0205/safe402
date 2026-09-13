@@ -26,6 +26,15 @@ describe('parseManifest', () => {
     const m = structuredClone(base); m.capabilities.filesystem = ['~/.cache/x'];
     expect(parseManifest(m).capabilities.filesystem[0]).toBe('/home/tool/.cache/x');
   });
+  it('rejects filesystem paths containing a traversal segment, before and after ~ expansion', () => {
+    for (const p of ['/home/tool/.cache/../.aws/credentials', '~/.cache/../.aws/credentials', '/home/tool/..']) {
+      const m = structuredClone(base); m.capabilities.filesystem = [p];
+      expect(() => parseManifest(m)).toThrow(ManifestError);
+      expect(() => parseManifest(m)).toThrow(/path traversal not allowed/);
+    }
+    const ok = structuredClone(base); ok.capabilities.filesystem = ['/home/tool/..cache/x'];
+    expect(parseManifest(ok).capabilities.filesystem[0]).toBe('/home/tool/..cache/x');
+  });
 });
 
 describe('resolveArtifact', () => {

@@ -17,7 +17,7 @@ function obs(p: Partial<Observation>): Observation {
 function input(over: Partial<EvidenceBundle> = {}, covOver: Partial<EvidenceBundle['coverage']> = {}, bindOver: Partial<DecideInput['bindings']> = {}): DecideInput {
   const evidence: EvidenceBundle = { schemaVersion: '1.0', auditId: 'a', artifactHash: 'sha256:art', executionProfileHash: 'sha256:prof', evidenceMode: 'REAL_ARTIFACT_TEST',
     observations: [], findings: [], coverage: { profileId: 'no-network-v1', testsRequested: ['mcp_initialize', 'get_price_call'], testsCompleted: ['mcp_initialize', 'get_price_call'],
-      testsSkipped: [{ testId: 'network_egress', reason: 'network disabled by profile' }], unsupported: [], collectorErrors: [], timedOut: false, baselineOpens: 0, staticIncomplete: false, fixtureVersion: 'sha256:art', ...covOver },
+      testsSkipped: [{ testId: 'network_egress', reason: 'network disabled by profile' }], unsupported: [], collectorErrors: [], timedOut: false, baselineOpens: 12, staticIncomplete: false, fixtureVersion: 'sha256:art', ...covOver },
     collectorVersion: 'strace-v1', analyzerVersion: 'regex-v1', ...over };
   return { evidence, policy, manifest, profile, bindings: { artifactHash: 'sha256:art', executionProfileHash: 'sha256:prof', ...bindOver } };
 }
@@ -37,6 +37,10 @@ describe('decide', () => {
   });
   it('attempted but denied canary read still blocks', () => {
     const r = decide(input({ observations: [obs({ target: '/home/tool/.aws/credentials', permitted: false, completed: false })] }));
+    expect(r.decision).toBe('BLOCK'); expect(r.reasonCodes).toContain('CREDENTIAL_ACCESS_ATTEMPTED');
+  });
+  it('a non-read canary touch is critical too', () => {
+    const r = decide(input({ observations: [obs({ operation: 'WRITE', target: '/home/tool/.aws/credentials' })] }));
     expect(r.decision).toBe('BLOCK'); expect(r.reasonCodes).toContain('CREDENTIAL_ACCESS_ATTEMPTED');
   });
   it('process spawn blocks under allowSpawn=false', () => {
@@ -100,11 +104,84 @@ describe('decide', () => {
     expect(r.reasonCodes).not.toContain('ALL_CHECKS_SATISFIED');
   });
 
-  it('a structurally invalid manifest is a binding failure', () => {
-    const broken = structuredClone(manifest) as unknown as { capabilities: unknown };
-    delete (broken as { capabilities?: unknown }).capabilities;
-    const r = decide({ ...input(), manifest: broken as unknown as CapabilityManifest });
-    expect(r).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+  it('an invalid manifest is a binding failure', () => {
+    const broken = structuredClone(manifest) as unknown as { capabilities?: unknown };
+    delete broken.capabilities;
+    expect(decide({ ...input(), manifest: broken as unknown as CapabilityManifest })).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+    const junk = structuredClone(manifest); (junk.capabilities as { filesystem: unknown }).filesystem = 'not-an-array';
+    expect(decide({ ...input(), manifest: junk })).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+  });
+
+  it('a declared path with a traversal segment never reaches the allowlist check', () => {
+    // The manifest schema rejects `..` outright, so the engine stops at the binding gate rather than
+    // reaching DECLARED_PATH_NOT_ALLOWED. Either way the verdict is BLOCK — the traversal cannot pass.
+    const pol = structuredClone(policy); pol.rules.filesystem.allowedPaths = ['/home/tool/.cache'];
+    const f = structuredClone(manifest); f.capabilities.filesystem = ['/home/tool/.cache/../.aws/credentials'];
+    expect(decide({ ...input(), manifest: f, policy: pol })).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+  });
+
+  it('a canary reached through a traversal target is still a credential access', () => {
+    // Without path normalization this string does not equal the canary and the run would ALLOW.
+    const r = decide(input({ observations: [obs({ target: '/home/tool/.cache/../.aws/credentials' })] }));
+    expect(r.decision).toBe('BLOCK');
+    expect(r.reasonCodes).toEqual(['CREDENTIAL_ACCESS_OBSERVED', 'UNDECLARED_FILE_ACCESS']);
+  });
+
+  it('normalizes redundant segments on both sides of the allowlist comparison', () => {
+    const pol = structuredClone(policy); pol.rules.filesystem.allowedPaths = ['/home/tool/./.cache'];
+    const f = structuredClone(manifest); f.capabilities.filesystem = ['/home/tool/.cache//prices/./feed'];
+    expect(decide({ ...input(), manifest: f, policy: pol }).decision).toBe('ALLOW');
+    const g = structuredClone(manifest); g.capabilities.filesystem = ['/home/tool/.cacheX'];
+    expect(decide({ ...input(), manifest: g, policy: pol }).reasonCodes).toContain('DECLARED_PATH_NOT_ALLOWED');
+  });
+
+  it('a declared wallet blocks whenever signing is disallowed, even if transactions are allowed', () => {
+    const pol = structuredClone(policy); pol.rules.wallet = { allowSigning: false, allowTransactions: true };
+    const w = structuredClone(manifest); w.capabilities.wallet = ['sign'];
+    const r = decide({ ...input(), manifest: w, policy: pol });
+    expect(r.decision).toBe('BLOCK'); expect(r.reasonCodes).toContain('DECLARED_WALLET_NOT_ALLOWED');
+  });
+
+  it('coverage that belongs to another profile or another artifact is a binding failure', () => {
+    expect(decide(input({}, { profileId: 'some-other-profile' }))).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+    expect(decide(input({}, { fixtureVersion: 'sha256:someoneelse' }))).toEqual({ decision: 'BLOCK', reasonCodes: ['BINDING_FAILURE'] });
+  });
+
+  it('a silent trace is a collector failure, not a clean run', () => {
+    const r = decide(input({ observations: [] }, { baselineOpens: 0 }));
+    expect(r).toEqual({ decision: 'REVIEW', reasonCodes: ['COLLECTOR_FAILURE'] });
+    // baselineOpens > 0 with no observations is a genuine quiet run and still allows
+    expect(decide(input({ observations: [] }, { baselineOpens: 12 })).decision).toBe('ALLOW');
+  });
+
+  it('a declared host of * covers any completed connect', () => {
+    const m = structuredClone(manifest); m.capabilities.network = [{ host: '*', port: 80, methods: ['GET'] }];
+    const pol = structuredClone(policy); pol.rules.network.allowedHosts = ['*'];
+    const r = decide({ ...input({ observations: [obs({ capability: 'NETWORK', operation: 'CONNECT', target: 'evil.example.test:80' })] }), manifest: m, policy: pol });
+    expect(r.decision).toBe('ALLOW');
+  });
+
+  it('collapses repeated violations into one code and accumulates every mismatch', () => {
+    const dup = decide(input({ observations: [
+      obs({ capability: 'PROCESS', operation: 'SPAWN', target: '/bin/sh', sequence: 1 }),
+      obs({ capability: 'PROCESS', operation: 'SPAWN', target: '/bin/sh', sequence: 2 }) ] }));
+    expect(dup.reasonCodes).toEqual(['PROCESS_SPAWN_FORBIDDEN']);
+    const m = structuredClone(manifest);
+    m.capabilities.network.push({ host: 'a.example.test', port: 443, methods: ['GET'] }, { host: 'b.example.test', port: 443, methods: ['GET'] });
+    m.capabilities.wallet = ['sign']; m.capabilities.process = ['spawn']; m.capabilities.filesystem = ['/etc/passwd', '/etc/shadow'];
+    const r = decide({ ...input(), manifest: m });
+    expect(r.decision).toBe('BLOCK');
+    expect(r.reasonCodes).toEqual(['DECLARED_HOST_NOT_ALLOWED', 'DECLARED_PATH_NOT_ALLOWED', 'DECLARED_PROCESS_NOT_ALLOWED', 'DECLARED_WALLET_NOT_ALLOWED']);
+  });
+
+  it('returns reason codes in a stable sorted order regardless of observation order', () => {
+    const canary = obs({ target: '/home/tool/.aws/credentials' });
+    const spawn = obs({ capability: 'PROCESS', operation: 'SPAWN', target: '/bin/sh' });
+    const forward = decide(input({ observations: [canary, spawn] })).reasonCodes;
+    const reverse = decide(input({ observations: [spawn, canary] })).reasonCodes;
+    expect(forward).toEqual(reverse);
+    expect(forward).toEqual(['CREDENTIAL_ACCESS_OBSERVED', 'PROCESS_SPAWN_FORBIDDEN', 'UNDECLARED_FILE_ACCESS']);
+    expect([...forward]).toEqual([...forward].sort());
   });
 
   it('is pure: it does not mutate its inputs and repeats its verdict', () => {
