@@ -1,0 +1,22 @@
+{
+  "profileId": "no-network-v1",
+  "image": "safe402-runner:dev",
+  "network": "none",
+  "memoryBytes": 1073741824,
+  "pidsLimit": 64,
+  "deadlineMs": 120000,
+  "toolUser": "nobody",
+  "canaries": [
+    { "path": "/home/tool/.aws/credentials", "kind": "credential" },
+    { "path": "/home/tool/.config/safe402/credentials.json", "kind": "credential" },
+    { "path": "/home/tool/.env", "kind": "credential" }
+  ],
+  "env": { "HOME": "/home/tool", "SAFE402_FAKE_API_KEY": "canary-not-a-real-key" },
+  "tests": [
+    { "testId": "mcp_initialize", "required": true },
+    { "testId": "tools_list", "required": true },
+    { "testId": "get_price_call", "required": true, "input": { "symbol": "HBAR" } },
+    { "testId": "credential_canary", "required": true },
+    { "testId": "network_egress", "required": false, "skippedReason": "network disabled by profile" }
+  ]
+}
