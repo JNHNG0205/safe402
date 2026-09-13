@@ -87,6 +87,14 @@ describe('evidence bundle', () => {
     expect(evidenceHash).toBe(hashCanonical('safe402/evidence/v1', bundle));
   });
 
+  it('refuses observations belonging to another audit', () => {
+    const foreign: RunResult = { ...run, observations: [{ ...run.observations[0]!, auditId: 'other' }] };
+    expect(() => buildEvidence({
+      auditId: 'a', artifactHash: 'sha256:art', executionProfileHash: 'sha256:prof', run: foreign, findings: [],
+      staticIncomplete: false, analyzerVersion: 'regex-v1',
+    })).toThrow(/observation auditId other does not match bundle auditId a/);
+  });
+
   it('carries the caller-supplied staticIncomplete flag into coverage', () => {
     const { bundle } = buildEvidence({
       auditId: 'a', artifactHash: 'sha256:art', executionProfileHash: 'sha256:prof', run, findings: [],
@@ -127,6 +135,14 @@ describe('decision capsule', () => {
     expect(authorizationKey('s', 'a', 'p', 'e')).not.toBe(authorizationKey('s', 'a2', 'p', 'e'));
     expect(authorizationKey('s', 'a', 'p', 'e')).not.toBe(authorizationKey('s', 'a', 'p2', 'e'));
     expect(authorizationKey('s', 'a', 'p', 'e')).not.toBe(authorizationKey('s', 'a', 'p', 'e2'));
+  });
+
+  it('authorization key resists separator injection', () => {
+    // Under a newline-joined encoding these two tuples produce the identical pre-image
+    // "<tag>\ns\na\np\ne\nx", so an attacker controlling subjectId could forge another
+    // subject's authorization lineage. Canonical-JSON hashing keeps them distinct.
+    expect(authorizationKey('s\na', 'p', 'e', 'x')).not.toBe(authorizationKey('s', 'a', 'p', 'e\nx'));
+    expect(authorizationKey('s\na', 'p', 'e', 'x')).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });
 
@@ -183,17 +199,64 @@ describe('signing and verification', () => {
     });
   });
 
-  it('derives a stable 32-byte public key from a seed', () => {
+  it('derives a stable 32-byte public key from a seed and rejects malformed seeds', () => {
     const a = issuerFromSeed(seed);
     const b = issuerFromSeed('0x' + seed);
     expect(a.publicKeyHex).toMatch(/^[0-9a-f]{64}$/);
     expect(b.publicKeyHex).toBe(a.publicKeyHex);
     expect(() => issuerFromSeed('ab')).toThrow(/32 bytes/);
+    // Buffer.from(_, 'hex') would truncate at the 'z' and silently yield a different key.
+    expect(() => issuerFromSeed('ab'.repeat(32) + 'zz')).toThrow(/32 bytes of hex/);
+    expect(() => issuerFromSeed('zz'.repeat(32))).toThrow(/32 bytes of hex/);
+  });
+
+  it('refuses to sign a hash that does not belong to the body', () => {
+    const { report, issuer } = build();
+    expect(() => signReport(report.report, 'sha256:' + '0'.repeat(64), 'issuer-1', issuer.privateKey))
+      .toThrow(/reportHash mismatch/);
   });
 
   it('rejects an unknown issuer', () => {
     const { env } = build();
     expect(verifyEnvelope(env, {}, 2000)).toMatchObject({ ok: false, failedCheck: 'issuer', checks: ['schema', 'reportHash'] });
+  });
+
+  it('rejects an issuer that only resolves through the prototype chain', () => {
+    const { env, issuer } = build();
+    const inherited = Object.create({ 'issuer-1': issuer.publicKeyHex }) as Record<string, string>;
+    expect(inherited['issuer-1']).toBe(issuer.publicKeyHex);
+    expect(verifyEnvelope(env, inherited, 2000)).toMatchObject({ ok: false, failedCheck: 'issuer' });
+    expect(verifyEnvelope({ ...env, issuer: 'toString' }, {}, 2000)).toMatchObject({ ok: false, failedCheck: 'issuer' });
+  });
+
+  it('rejects a signature that is not lowercase 64-byte hex', () => {
+    const { env, trusted } = build();
+    expect(verifyEnvelope({ ...env, signature: env.signature.toUpperCase() }, trusted, 2000))
+      .toMatchObject({ ok: false, failedCheck: 'signature' });
+    expect(verifyEnvelope({ ...env, signature: env.signature + '00' }, trusted, 2000))
+      .toMatchObject({ ok: false, failedCheck: 'signature' });
+    expect(verifyEnvelope({ ...env, signature: env.signature.slice(0, -2) }, trusted, 2000))
+      .toMatchObject({ ok: false, failedCheck: 'signature' });
+  });
+
+  it('rejects an unknown report schemaVersion or decision at schema', () => {
+    const { env, trusted } = build();
+    const wrongVersion = structuredClone(env);
+    (wrongVersion.report as { schemaVersion: string }).schemaVersion = '2.0';
+    expect(verifyEnvelope(wrongVersion, trusted, 2000)).toMatchObject({ ok: false, failedCheck: 'schema', checks: [] });
+    const wrongDecision = structuredClone(env);
+    (wrongDecision.report.capsule as { decision: string }).decision = 'MAYBE';
+    expect(verifyEnvelope(wrongDecision, trusted, 2000)).toMatchObject({ ok: false, failedCheck: 'schema', checks: [] });
+  });
+
+  it('refuses to judge expiry without a usable clock', () => {
+    const { env, trusted } = build();
+    expect(verifyEnvelope(env, trusted, Number.NaN)).toMatchObject({
+      ok: false, failedCheck: 'expiry', checks: ['schema', 'reportHash', 'issuer', 'signature', 'capsuleHash'],
+    });
+    expect(verifyEnvelope(env, trusted, undefined as unknown as number)).toMatchObject({ ok: false, failedCheck: 'expiry' });
+    expect(verifyEnvelope(env, trusted, 2000.5)).toMatchObject({ ok: false, failedCheck: 'expiry' });
+    expect(verifyEnvelope(env, trusted, Number.POSITIVE_INFINITY)).toMatchObject({ ok: false, failedCheck: 'expiry' });
   });
 
   it('rejects a tampered report body at reportHash', () => {

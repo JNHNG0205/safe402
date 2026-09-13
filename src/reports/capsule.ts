@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalJson } from '../canonical/json.js';
 import { hashCanonical } from '../canonical/hash.js';
 import type { Decision, DecisionCapsule } from '../domain/types.js';
 import type { ReasonCode } from '../domain/reasonCodes.js';
@@ -6,6 +7,9 @@ import type { ReasonCode } from '../domain/reasonCodes.js';
 /**
  * Stable identity for an authorization lineage: the same subject running the same artifact
  * under the same policy and execution profile. `authorizationSequence` counts within this key.
+ *
+ * The fields are hashed as a canonical JSON struct, not as a delimiter-joined string: joining
+ * on a separator lets a field containing that separator forge another tuple's key.
  */
 export function authorizationKey(
   subjectId: string,
@@ -14,7 +18,7 @@ export function authorizationKey(
   executionProfileHash: string,
 ): string {
   const digest = createHash('sha256')
-    .update(['safe402/authorization/v1', subjectId, artifactHash, policyCommitment, executionProfileHash].join('\n'), 'utf8')
+    .update('safe402/authorization/v1\n' + canonicalJson({ subjectId, artifactHash, policyCommitment, executionProfileHash }), 'utf8')
     .digest('hex');
   return `sha256:${digest}`;
 }

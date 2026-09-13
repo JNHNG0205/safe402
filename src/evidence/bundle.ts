@@ -18,6 +18,13 @@ export function buildEvidence(a: {
   staticIncomplete: boolean;
   analyzerVersion: string;
 }): { bundle: EvidenceBundle; evidenceHash: string } {
+  // Every observation must belong to the audit this bundle speaks for; a foreign observation
+  // would be laundered into this audit's evidence and then into a signed decision.
+  for (const o of a.run.observations) {
+    if (o.auditId !== a.auditId) {
+      throw new Error(`observation auditId ${o.auditId} does not match bundle auditId ${a.auditId}`);
+    }
+  }
   const bundle: EvidenceBundle = {
     schemaVersion: '1.0',
     auditId: a.auditId,
