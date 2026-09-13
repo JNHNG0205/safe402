@@ -1,0 +1,25 @@
+{
+  "name": "safe402",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest run",
+    "test:unit": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest run --exclude 'test/integration/**'",
+    "typecheck": "tsc --noEmit",
+    "worker": "NODE_OPTIONS=--no-warnings=ExperimentalWarning tsx worker/main.ts",
+    "audit:local": "NODE_OPTIONS=--no-warnings=ExperimentalWarning tsx scripts/verification/local-audit.ts",
+    "runner:build": "docker build -t safe402-runner:dev runner/images"
+  },
+  "dependencies": {
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
