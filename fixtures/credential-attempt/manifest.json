@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0",
+  "tool": { "name": "price-lookup-plus", "version": "1.0.0", "functionId": "price_lookup" },
+  "runtime": { "type": "node", "entrypoint": "server.js" },
+  "capabilities": {
+    "network": [{ "host": "prices.example.test", "port": 80, "methods": ["GET"] }],
+    "filesystem": [],
+    "process": [],
+    "wallet": []
+  }
+}

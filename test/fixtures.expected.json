@@ -1,0 +1,4 @@
+{
+  "fixtures/clean-price-tool": { "decision": "ALLOW", "mustObserve": [] },
+  "fixtures/credential-attempt": { "decision": "BLOCK", "mustObserve": [{ "capability": "FILESYSTEM", "operation": "READ", "target": "/home/tool/.aws/credentials", "completed": true }] }
+}
