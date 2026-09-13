@@ -1,181 +1,155 @@
+# Safe402 — Phased Implementation Specification
 
-# Safe402 — Spec 
+**Deadline:** 180 minutes  
+**Delivery target:** Reproducible working demo  
+**Interfaces:** CLI, MCP, and a minimal Next.js dashboard  
+**Integrations:** Hedera, Chainlink CRE, and The Graph
 
-## 1. Objective and Working Rules
+---
 
-**Deliver a reproducible working demo.**
+## Implementation Rules
 
-Safe402 must demonstrate an agent requesting tool verification, paying for it, receiving evidence and a policy decision, and being prevented from executing a blocked tool.
+Before implementing **every checklist item**:
 
-Prioritize:
+1. Search the current codebase for an existing implementation.
+2. Trace the implementation and its callers.
+3. Verify its actual behavior.
+4. If complete and working, mark it complete and move on.
+5. If partial, implement only the missing behavior.
+6. If missing, inspect related modules and follow existing patterns.
+7. If externally blocked, document the blocker and continue independent work.
 
-1. Working security and execution flow.
-2. Hedera, Chainlink, and The Graph integrations.
-3. CLI and MCP access.
-4. Two Next.js dashboard screens.
-5. Verification and handoff.
+**Do not rebuild working functionality.**
 
-The deadline is for a demonstrable MVP, not a production-ready arbitrary-code security service. Do not claim completion of features that remain blocked.
+A filename, README statement, UI badge, or mocked response does not prove that a feature works.
 
-### Instructions to the coding agent
-
-> Before implementing any checklist item, inspect whether it already exists. Trace its actual execution path and run a focused verification. If it works and meets the requirement, mark it complete and move on. If it is partial or missing, search the relevant code and call sites, then implement only the missing behavior. Do not rebuild working features.
-
-For each item, follow:
-
-```text
-Locate implementation
-        ↓
-Inspect callers, dependencies, and configuration
-        ↓
-Verify actual behavior
-        ↓
-Works → mark complete and move on
-Partial → fix the smallest missing part
-Missing → implement using existing patterns
-Externally blocked → document and continue independent work
-```
-
-**A filename, TODO, README claim, UI badge, or mocked response is not proof of implementation.**
-
-### Checklist conventions
-
-Create a sprint checklist in the implementation repository.
-
-Use:
+### Checklist format
 
 ```markdown
-- [x] Verified existing — evidence: test or command
-- [x] Implemented and verified — evidence: test or command
+- [x] Verified existing — evidence: command, test, or transaction
+- [x] Implemented and verified — evidence: command, test, or transaction
 - [ ] Partial — remaining behavior
-- [ ] Blocked — external dependency and required resolution
-- [ ] Deferred — outside the three-hour demo
+- [ ] Blocked — dependency and required resolution
+- [ ] Deferred — outside this sprint
 ```
 
-Never check an item merely because code was written.
+### Mandatory safeguards
 
-### Repository assumption
-
-The project mirror inspected for this handoff contains reference material, not the active application checkout. Perform this sprint in the actual Safe402 repository.
-
-- [ ] Identify the current repository and branch.
-- [ ] Read applicable repository instructions.
-- [ ] Inspect uncommitted changes and preserve them.
-- [ ] Record the starting commit.
-- [ ] Use the current checkout as the implementation source of truth.
-- [ ] Use [MARS](https://github.com/derek2403/ethnyc) only as the baseline or reuse reference where needed.
-- [ ] Do not edit synced files under `sources/`.
+- Use **Safe402** for new product branding.
+- Preserve existing licenses, attribution, and user changes.
+- Do not edit read-only synced reference files.
+- Never fabricate payments, observations, reports, or transaction references.
+- Never generate approval from canned fallback data.
+- Never describe LLM analysis as observed runtime behavior.
+- Never describe a content hash as enclave attestation.
+- Keep signing keys and service credentials outside submitted-tool environments.
+- Refuse execution when required verification is incomplete.
+- Distinguish local evaluation, CRE simulation, and live confidential execution.
+- Keep the frontend optional for operating the product.
 
 ---
 
-## 2. Scope Locked for This Sprint
+## Product Objective
 
-### Required demonstration
+Safe402 helps AI agents verify third-party tools before execution.
 
-```text
-CLI or reference agent
-        ↓
-Select exact tool artifact
-        ↓
-Request verification
-        ↓
-Authorize bounded x402 payment
-        ↓
-Confirm Hedera settlement
-        ↓
-Collect static and actual runtime evidence
-        ↓
-Evaluate private policy through CRE
-        ↓
-Persist report and public provenance
-        ↓
-Update execution authorization
-        ↓
-Read live security history through The Graph
-        ↓
-Gateway blocks forbidden execution
-        ↓
-Gateway permits a compatible clean fixture
-```
+The system must:
 
-### Minimal product surface
+1. Identify an exact tool artifact.
+2. Accept an audit request and bounded payment.
+3. Collect static findings and actual behavioral evidence.
+4. Compare declared capabilities with observed behavior.
+5. Evaluate the evidence against an execution policy.
+6. Produce an authenticated report.
+7. Record public provenance.
+8. Check current authorization.
+9. Allow restricted execution or refuse to launch the tool.
 
-| Component | Sprint requirement |
-|---|---|
-| Artifact catalog | Two curated executable fixtures |
-| Policy | One file-configured research policy |
-| Analysis | Focused static checks and actual behavioral observation |
-| Payments | One fixed-price Hedera x402 operation |
-| CRE | One meaningful private-policy workflow |
-| Authorization | Minimal current decision, expiry, and revocation |
-| Graph | Hosted history query that affects the flow |
-| CLI | Verify, inspect, execute, and demo |
-| MCP | Thin wrappers around those operations |
-| Frontend | Audit list and audit detail |
-| Storage | Existing persistent storage; avoid migration |
-| Worker | One worker, one concurrent audit |
-| Demo | Repeatable happy path and blocked path |
+### Core decisions
 
-### Explicitly deferred
-
-- [ ] Arbitrary public package uploads.
-- [ ] Broad language and runtime support.
-- [ ] Open auditor marketplace.
-- [ ] World ID.
-- [ ] Arc settlement.
-- [ ] Escrow, NFTs, bonds, royalties.
-- [ ] Browser policy editor.
-- [ ] Dedicated demo webpage.
-- [ ] Multi-agent orchestration.
-- [ ] Substreams pipeline.
-- [ ] Automatic alternative ranking.
-- [ ] New design system.
-- [ ] Production infrastructure redesign.
-
-Do not delete working legacy features merely to achieve these exclusions. Remove them from the Safe402 demo flow and navigation where necessary.
-
----
-
-## 3. Time Budget
-
-Start a wall-clock timer and record the deadline.
-
-| Elapsed time | Work | Required checkpoint |
+| Decision | Meaning | Execution |
 |---|---|---|
-| 0–15 minutes | Inspect and verify existing implementation | Evidence-backed gap list |
-| 15–30 minutes | Dependency and partner smoke checks | Working paths or explicit blockers |
-| 30–70 minutes | Complete security core and CLI flow | Clean and blocked fixtures produce real results |
-| 70–115 minutes | Connect partner integrations and authorization | Payment, evaluation, history, and enforcement connected |
-| 115–140 minutes | Finish MCP and two dashboard screens | Same audit visible through all interfaces |
-| 140–165 minutes | End-to-end checks and repairs | Reproducible demo |
-| 165–180 minutes | Freeze features and prepare handoff | Commands, evidence, limitations, recording steps |
+| `ALLOW` | Required checks satisfy the selected policy | Permitted after final authorization checks |
+| `REVIEW` | Evidence is incomplete or ambiguous | Refused |
+| `BLOCK` | Forbidden behavior or invalid binding | Refused |
 
-### Deadline rules
-
-- Reclaim time from already verified features.
-- Do not spend more than ten minutes repeatedly diagnosing an inaccessible external service.
-- Report a credential/access blocker immediately, then continue independent work.
-- At minute 115, stop adding optional capabilities.
-- At minute 140, prioritize integration failures over styling.
-- At minute 165, freeze features. Only fix demo-breaking issues.
-- At minute 180, report the actual delivered state and outstanding work.
-
-A blocked integration remains unchecked. Do not replace it with fabricated success.
+Approval applies only to the verified artifact, policy, requester scope, execution profile, and validity period.
 
 ---
 
-## 4. First 15 Minutes: Implementation Inventory
+## Sprint Scope
 
-### Environment and application
+### Required
 
-- [ ] Inspect package manager, lockfile, runtime requirements, and available scripts.
-- [ ] Identify frontend router and API framework.
-- [ ] Identify storage and job-processing implementation.
-- [ ] Identify current run and build commands.
+- Two curated executable test tools.
+- One file-configured execution policy.
+- Real behavioral observation.
+- Persistent audit results.
+- Fixed-price Hedera x402 integration.
+- CRE policy evaluation.
+- Current authorization with expiry and revocation.
+- Live history through The Graph.
+- CLI and MCP access.
+- Two Next.js dashboard screens.
+- Repeatable demonstration.
+
+### Deferred
+
+- Arbitrary public uploads.
+- Broad runtime support.
+- Auditor marketplace.
+- World ID.
+- Arc settlement.
+- Escrow, NFTs, bonds, and royalties.
+- Browser policy editor.
+- Dedicated demo webpage.
+- Automatic alternative ranking.
+- Substreams implementation.
+- New design system.
+- Production infrastructure redesign.
+
+Do not delete working legacy functionality merely because it is outside this sprint. Keep it outside the Safe402 demonstration flow.
+
+---
+
+## Phase Schedule
+
+| Phase | Time window | Deliverable |
+|---|---|---|
+| 1. Inspect | 0–15 minutes | Verified implementation inventory |
+| 2. Check dependencies | 15–30 minutes | Integration readiness and blockers |
+| 3. Complete security core | 30–70 minutes | Real clean/blocked audit results |
+| 4. Connect integrations | 70–115 minutes | Payment, policy, provenance, and enforcement |
+| 5. Finish interfaces | 115–140 minutes | CLI/MCP and two dashboard screens |
+| 6. Verify | 140–165 minutes | Reproducible end-to-end demonstration |
+| 7. Handoff | 165–180 minutes | Commands, evidence, checklist, limitations |
+
+Reclaim time from features that already work.
+
+Do not mark a phase complete unless its exit criteria pass. If a timebox expires, record the remaining gaps and continue work that can proceed independently.
+
+---
+
+# Phase 1 — Inspect the Existing Codebase
+
+**Timebox: 15 minutes**
+
+## Goal
+
+Find the shortest path to a working demonstration without duplicating existing work.
+
+## Tasks
+
+- [ ] Identify the repository, branch, and starting commit.
+- [ ] Read applicable repository instructions.
+- [ ] Inspect and preserve uncommitted changes.
+- [ ] Identify package manager and lockfile.
+- [ ] Identify runtime requirements.
+- [ ] Identify frontend routing and API structure.
+- [ ] Identify persistent storage.
+- [ ] Identify worker or job-processing code.
 - [ ] Run the smallest existing health check.
-- [ ] Check required configuration names without printing secrets.
-
-### Existing feature search
+- [ ] Create the sprint checklist.
 
 Search for:
 
@@ -198,173 +172,211 @@ execute
 revocation
 ```
 
-For each relevant result:
+For each relevant feature:
 
-- [ ] Identify the entrypoint.
-- [ ] Trace the actual function being called.
-- [ ] Check whether it reaches a real dependency or fixture.
-- [ ] Check fallback behavior.
-- [ ] Locate existing tests or create a focused verification when necessary.
+- [ ] Find its entrypoint.
+- [ ] Trace its actual execution path.
+- [ ] Identify real dependencies and test fixtures.
+- [ ] Inspect failure and fallback behavior.
+- [ ] Run a focused verification.
 
-### Inventory output
+## Inventory
 
-Produce a short table:
+Record:
 
-| Capability | Existing location | Verified behavior | Gap |
+| Capability | Implementation location | Verified behavior | Remaining gap |
 |---|---|---|---|
-| CLI verification | Discovered path | Actual result | Missing behavior |
-| Runtime collector | Discovered path | Actual event | Missing behavior |
-| Payment | Discovered path | Settlement result | Missing behavior |
-| CRE | Discovered path | Execution result | Missing behavior |
-| Graph | Discovered path | Hosted query | Missing behavior |
-| Gateway | Discovered path | Launch prevented | Missing behavior |
+| Audit submission | Discovered location | Evidence | Gap |
+| Runtime observation | Discovered location | Evidence | Gap |
+| Payment | Discovered location | Evidence | Gap |
+| CRE evaluation | Discovered location | Evidence | Gap |
+| Graph query | Discovered location | Evidence | Gap |
+| Gateway enforcement | Discovered location | Evidence | Gap |
+| Dashboard | Discovered location | Evidence | Gap |
 
-Do not turn this into a lengthy code review. Its purpose is to prevent duplicate work and identify the shortest completion path.
+## Exit criteria
+
+- [ ] Existing capabilities are distinguished from missing capabilities.
+- [ ] No feature is assumed complete from documentation alone.
+- [ ] The remaining work is prioritized by demo impact.
 
 ---
 
-## 5. Minutes 15–30: Dependency Checks
+# Phase 2 — Check External Dependencies
 
-### Hedera and Blocky402
+**Timebox: 15 minutes**
+
+## Goal
+
+Discover configuration and access blockers early.
+
+## Hedera and Blocky402
 
 - [ ] Verify testnet configuration.
-- [ ] Verify payer and recipient configuration.
-- [ ] Verify compatible client/server/facilitator versions.
-- [ ] Perform the smallest bounded paid request if configured.
-- [ ] Save its settlement reference.
-- [ ] Confirm the existing payment path uses Hedera, not only legacy Arc configuration.
+- [ ] Verify payer and recipient configuration without printing secrets.
+- [ ] Verify compatible payment SDK versions.
+- [ ] Confirm the accepted asset and network.
+- [ ] Perform a bounded paid request when configured.
+- [ ] Save the settlement reference.
+- [ ] Confirm settlement occurs on Hedera.
 
-### Chainlink
+## Chainlink CRE
 
-- [ ] Locate the existing CRE workflow.
-- [ ] Confirm whether it uses a confidential handler.
-- [ ] Run an existing simulation or the smallest supported example.
-- [ ] Confirm it evaluates a meaningful private parameter.
-- [ ] Inspect its consumer-contract delivery path.
-- [ ] Distinguish authenticated CRE delivery from application-signed test writes.
+- [ ] Locate the workflow and configuration.
+- [ ] Confirm use of a confidential handler.
+- [ ] Run the smallest available workflow.
+- [ ] Confirm a private parameter affects its result.
+- [ ] Identify whether execution is simulated or live.
+- [ ] Inspect the consumer-contract delivery path.
+- [ ] Distinguish authenticated CRE delivery from a manual test transaction.
 
-### The Graph
+### Execution-mode policy
 
-- [ ] Locate the schema, event mappings, deployment ID, and endpoint.
-- [ ] Query the hosted endpoint.
-- [ ] Confirm returned data corresponds to actual contract events.
-- [ ] Record index freshness.
-- [ ] Confirm the application uses the result.
+CRE simulation is allowed for the deadline demonstration when live confidential access is unavailable.
 
-### Runner
+However:
 
-- [ ] Confirm the supported isolated execution environment is available.
-- [ ] Execute one curated fixture.
-- [ ] Confirm an observation is collected outside the fixture’s self-reported output.
+- Simulation must be labeled.
+- Simulation does not count as live TEE protection.
+- Local policy evaluation does not count as CRE execution.
+- A manual test transaction does not count as authenticated CRE delivery.
 
-### Blocker handling
+## The Graph
 
-If configuration is missing:
+- [ ] Locate schema and mappings.
+- [ ] Locate the hosted endpoint and deployment identifier.
+- [ ] Run a real hosted query.
+- [ ] Verify that results correspond to actual indexed events.
+- [ ] Record indexing progress.
+- [ ] Identify how the application consumes the result.
 
-1. Identify the exact missing variable or access requirement.
-2. Ask for that missing setup once.
-3. Continue work that does not depend on it.
-4. Keep the integration clearly unavailable.
-5. Never print or request secrets in logs or public output.
+## Runner
+
+- [ ] Verify an isolated execution environment is available.
+- [ ] Execute one controlled fixture.
+- [ ] Confirm observations come from a collector rather than fixture claims.
+- [ ] Confirm host credentials are unavailable to the fixture.
+
+## Blocker handling
+
+For each unavailable dependency:
+
+1. Record the exact missing configuration or access.
+2. Request the missing setup once.
+3. Continue independent work.
+4. Keep the feature marked blocked.
+5. Never substitute fabricated successful output.
+
+Do not spend more than ten minutes repeatedly diagnosing the same inaccessible service.
+
+## Exit criteria
+
+- [ ] Each dependency has a verified path or a specific blocker.
+- [ ] Execution modes are documented.
+- [ ] Available dependencies can be used by later phases.
 
 ---
 
-## 6. Security Core: Smallest Complete Implementation
+# Phase 3 — Complete the Security Core
 
-### 6.1 Curated fixtures
+**Timebox: 40 minutes**
 
-Use exactly two primary fixtures.
+## Goal
 
-#### Clean fixture
+Produce real evidence and enforceable decisions for two controlled tools.
 
-- Provides a simple price lookup.
+## 3.1 Prepare the fixtures
+
+### Clean tool
+
+- Performs a price lookup.
 - Uses a controlled endpoint.
 - Declares its network requirement.
 - Does not request credential or wallet access.
 
-#### Blocked fixture
+### Blocked tool
 
-- Presents the same useful function.
+- Offers the same useful function.
 - Attempts to read a synthetic credential file.
 - Does not declare that access.
 - Uses no real secrets.
 
-A network-exfiltration fixture is optional if already implemented.
-
 Checklist:
 
-- [ ] Both fixtures initialize through the supported MCP harness.
+- [ ] Both initialize through the supported MCP harness.
+- [ ] Both have manifests.
 - [ ] Both have immutable executable identities.
-- [ ] Both have capability declarations.
-- [ ] Both have bounded inputs.
-- [ ] Expected outcomes are documented separately from observed results.
+- [ ] Both accept bounded inputs.
+- [ ] Expected test outcomes are separate from collected evidence.
 
-Do not derive the verdict from the fixture’s name or expected-outcome configuration.
+**Never determine the verdict from the fixture name.**
 
-### 6.2 Artifact binding
+## 3.2 Bind the artifact
 
-- [ ] Resolve a pinned artifact.
-- [ ] Hash normalized file paths and contents.
-- [ ] Include the manifest, entrypoint, and dependency lockfile when applicable.
+- [ ] Hash normalized paths and file contents.
+- [ ] Include the capability manifest and entrypoint.
+- [ ] Include the lockfile where relevant.
 - [ ] Record the prepared executable digest.
-- [ ] Launch the same immutable content that was checked.
+- [ ] Keep the executable content immutable between audit and launch.
 
-For this deadline, curated bundled JavaScript is sufficient. Do not build a general package-ingestion platform.
+Use curated bundled JavaScript for this sprint. Do not build general package ingestion.
 
-### 6.3 Behavioral observation
+## 3.3 Collect observations
 
-- [ ] Reuse the existing collector if verified.
-- [ ] Otherwise implement one observable behavior reliably: filesystem credential-access attempts.
-- [ ] Keep the collector outside the submitted process.
-- [ ] Distinguish attempted, denied, and completed actions.
-- [ ] Record test ID and collector source.
-- [ ] Enforce timeout and resource bounds.
+- [ ] Reuse a verified collector.
+- [ ] Otherwise implement reliable credential-file access observation.
+- [ ] Keep collection outside the submitted process.
+- [ ] Record attempted, permitted, and completed actions separately.
+- [ ] Include test ID and collector identity.
+- [ ] Enforce a timeout.
+- [ ] Enforce resource limits.
+- [ ] Destroy temporary test state after execution.
 
-If strong arbitrary-code isolation does not exist, restrict the demo to repository-controlled synthetic fixtures in an isolated environment. Do not enable public uploads or claim arbitrary-code safety.
+If arbitrary-code isolation is incomplete, allow only repository-controlled fixtures. Do not expose public uploads.
 
-### 6.4 Decision rules
+## 3.4 Implement policy evaluation
 
-Implement:
+Use one versioned research policy:
+
+```text
+Credential access: forbidden
+Wallet signing: forbidden
+Process spawning: forbidden
+Network: approved fixture endpoint only
+Required evidence: complete
+```
+
+- [ ] Validate the policy.
+- [ ] Bind its version or commitment to the result.
+- [ ] Keep private values out of public reports.
+- [ ] Implement deterministic decision precedence.
 
 ```text
 Confirmed forbidden behavior → BLOCK
 Required evidence missing → REVIEW
-Required checks complete and policy permits → ALLOW
+All required checks satisfied → ALLOW
 ```
 
-- [ ] Missing configuration cannot return `ALLOW`.
-- [ ] Collector failure cannot return `ALLOW`.
-- [ ] LLM failure cannot activate canned approval.
-- [ ] An explicit policy violation overrides any numeric score.
+- [ ] Collector failure cannot produce approval.
+- [ ] Missing configuration cannot produce approval.
+- [ ] LLM failure cannot activate canned results.
+- [ ] Critical violations override aggregate scores.
 
-Defer numeric scoring if it is not already useful and tested.
+Defer numeric scoring if it is not already useful and verified.
 
-### 6.5 Private policy
+## 3.5 Persist results
 
-Use one file-configured policy:
+Reuse current storage.
 
-```text
-No credential access
-No wallet signing
-No process spawning
-Only the fixture’s approved network destination
-Complete required behavioral coverage
-```
+If no persistent storage exists, use SQLite for this single-worker demo.
 
-- [ ] Register or load an immutable policy version.
-- [ ] Bind its commitment to the result.
-- [ ] Keep private parameter values out of public records.
-- [ ] Use the same decision rules locally and in CRE, with local results labeled as local.
+- [ ] Persist jobs before execution.
+- [ ] Persist observations and coverage.
+- [ ] Persist decisions and reports.
+- [ ] Persist payment associations.
+- [ ] Recover interrupted jobs as pending or failed.
 
-Local evaluation is a development aid, not a substitute for the claimed CRE integration.
-
----
-
-## 7. Shared Results and Persistence
-
-Keep current interfaces if they already satisfy these semantics. Do not rename working APIs merely to match this plan.
-
-### Minimum audit result
+## Minimum result fields
 
 ```text
 auditId
@@ -386,7 +398,7 @@ confidentialExecutionMode
 publicationStatus
 ```
 
-### Separate publication references
+Keep publication references in a separate envelope:
 
 ```text
 paymentReference
@@ -396,150 +408,151 @@ graphDeployment
 indexedBlock
 ```
 
-Do not put a report’s own digest or future publication receipts inside its signed payload.
+## Exit criteria
 
-### Storage
-
-- [ ] Reuse current persistent storage.
-- [ ] If no persistence exists, use SQLite for the single-worker demo.
-- [ ] Do not migrate a working database to PostgreSQL for this sprint.
-- [ ] Persist job state before starting work.
-- [ ] Persist payment association.
-- [ ] Persist results and publication attempts.
-- [ ] Recover interrupted jobs as pending or failed, never approved.
-
-### Payment retries
-
-- [ ] Same paid request returns the same job.
-- [ ] Settlement references cannot purchase unrelated audits.
-- [ ] Ambiguous settlement enters reconciliation.
-- [ ] Do not ask the payer to pay again until settlement state is resolved.
+- [ ] The clean fixture passes the compatible policy.
+- [ ] The blocked fixture produces an actual credential-access observation.
+- [ ] The blocked fixture receives `BLOCK`.
+- [ ] Missing required evidence produces `REVIEW`.
+- [ ] Results survive process restart.
 
 ---
 
-## 8. Partner Integration Completion
+# Phase 4 — Connect Payments, Policy, Provenance, and Enforcement
 
-### 8.1 Hedera
+**Timebox: 45 minutes**
 
-**Useful product role:** paid verification and linked public receipts.
+## Goal
 
-- [ ] Accept a fixed-price audit payment through Blocky402 on Hedera.
-- [ ] Enforce a client-side spending limit.
-- [ ] Keep signing keys outside the model and tool sandbox.
-- [ ] Link payment to audit ID and artifact hash.
-- [ ] Write the public result commitment to HCS.
-- [ ] Include a real receipt reference in CLI and dashboard.
-- [ ] Reuse service-discovery records if already implemented.
+Connect the core audit to the three services and actual execution control.
 
-Do not build an elaborate HCS hierarchy.
+## 4.1 Hedera payment
 
-**Acceptance:** one real paid request produces one audit and a matching HCS receipt.
+- [ ] Accept a fixed-price audit through Blocky402.
+- [ ] Validate network, asset, recipient, amount, and quote expiry.
+- [ ] Enforce the payer’s spending limit.
+- [ ] Keep signing outside the model and tool environment.
+- [ ] Associate settlement with one audit request.
+- [ ] Return the same job for repeated paid requests.
+- [ ] Reconcile ambiguous settlement before requesting another payment.
+- [ ] Prevent settlement reuse for unrelated requests.
 
-References:
+## 4.2 Hedera receipts
 
-- [Paid-request example](https://github.com/hedera-dev/x402-inference-pay-per-request-poc)
-- [Blocky402](https://blocky402.com/)
-- [Hedera documentation](https://docs.hedera.com/)
-- [x402 repository](https://github.com/x402-foundation/x402)
+- [ ] Publish an audit receipt.
+- [ ] Link payment, audit ID, and artifact hash.
+- [ ] Publish the report commitment.
+- [ ] Save a real HCS receipt reference.
+- [ ] Exclude private evidence and policy values.
 
-### 8.2 Chainlink
+Use a small number of existing topics. Do not build an elaborate registry hierarchy.
 
-**Useful product role:** private policy evaluation affecting execution authorization.
+## 4.3 CRE policy workflow
 
-- [ ] Use a meaningful confidential handler.
-- [ ] Load at least one private parameter.
-- [ ] Validate artifact and evidence references.
+- [ ] Load the evidence through an authenticated path.
+- [ ] Validate artifact and evidence binding.
+- [ ] Retrieve a meaningful private parameter.
+- [ ] Evaluate the policy.
 - [ ] Produce a policy-bound decision.
-- [ ] Keep private values out of public logs.
-- [ ] Preserve simulation/live provenance.
-- [ ] Deliver to the existing compatible consumer contract.
+- [ ] Record execution mode.
+- [ ] Deliver the result through the supported consumer path.
 
-Use the existing working network. If no integration exists, use Sepolia as the initial candidate and confirm support.
+The workflow must not trust observations supplied directly by the audited tool.
 
-**Acceptance:** changing the private policy parameter changes the expected decision; execution evidence is saved.
+## 4.4 Authorization state
 
-A simulated workflow must say “simulated.” A manual test write must not be labeled authenticated CRE report delivery.
-
-References:
-
-- [Hello Confidential Workflows](https://docs.chain.link/cre-templates/hello-confidential-workflows)
-- [AI Audit Firewall](https://docs.chain.link/cre-templates/ai-audit-firewall)
-- [CRE documentation](https://docs.chain.link/cre)
-
-### 8.3 The Graph
-
-**Useful product role:** live security history consulted by the client.
-
-- [ ] Reuse an existing hosted subgraph where suitable.
-- [ ] Otherwise index the minimal authorization lifecycle events.
-- [ ] Query by artifact identity.
-- [ ] Return decision history and revocation records.
-- [ ] Return index freshness.
-- [ ] Have the client use this result to identify an existing report or reject an indexed revoked candidate.
-- [ ] Perform authoritative checks before execution.
-
-Automatic alternatives are optional. A meaningful live history check is the required sprint behavior.
-
-**Acceptance:** emit a real lifecycle event, retrieve it through the hosted provider, and demonstrate its effect on the client’s flow.
-
-References:
-
-- [Subgraph MCP](https://thegraph.com/docs/en/subgraphs/tooling/subgraph-mcp/introduction/)
-- [Subgraphs Skills](https://github.com/graphprotocol/subgraphs-skills)
-- [Substreams Skills — deferred reference](https://github.com/streamingfast/substreams-skills)
-
-Installing a skill or returning local JSON is not a completed Graph integration.
-
----
-
-## 9. Authorization and Actual Enforcement
-
-### Contract requirements
-
-Reuse a working consumer. If missing, implement only:
+Reuse a working consumer or implement the minimum:
 
 - [ ] Authenticated decision receipt.
-- [ ] Artifact, subject, policy, and profile binding.
+- [ ] Artifact binding.
+- [ ] Policy binding.
+- [ ] Subject binding.
+- [ ] Execution-profile binding.
 - [ ] Expiry.
 - [ ] Revocation.
-- [ ] Duplicate/stale update protection.
-- [ ] Readable current authorization.
+- [ ] Replay and stale-update protection.
 - [ ] Indexable events.
 
-Do not add token issuance.
+Do not introduce tokens.
 
-### Gateway requirements
+## 4.5 Graph history
 
-Before every invocation:
+- [ ] Index the minimal authorization lifecycle.
+- [ ] Query by artifact identity.
+- [ ] Return decision history.
+- [ ] Return revocation information.
+- [ ] Return index freshness.
+- [ ] Use the query result in the client’s flow.
+
+A sufficient sprint behavior is:
+
+> The client retrieves a previous authorization through The Graph, then verifies its current authoritative state before attempting reuse.
+
+Do not count a static response or local fixture as a live Graph integration.
+
+## 4.6 Execution gateway
+
+Before launching:
 
 1. Authenticate the requester.
-2. Verify the exact executable artifact.
-3. Verify the report signature and accepted issuer.
-4. Confirm subject and policy binding.
-5. Check expiry and current revocation.
-6. Confirm required publication.
-7. Start the process under its restrictions.
+2. Resolve immutable executable content.
+3. Verify report signature and accepted issuer.
+4. Verify artifact, policy, subject, and profile.
+5. Check expiry and revocation.
+6. Check required publication.
+7. Start the process under restrictions.
 
 Checklist:
 
 - [ ] `BLOCK` prevents process launch.
 - [ ] `REVIEW` prevents process launch.
-- [ ] Changed artifact prevents process launch.
-- [ ] Revoked authorization prevents the next invocation.
+- [ ] Changed content prevents process launch.
+- [ ] Invalid signature prevents process launch.
+- [ ] Expired authorization prevents process launch.
+- [ ] Revocation prevents the next invocation.
 - [ ] Unavailable authoritative state prevents process launch.
-- [ ] Clean authorized fixture executes successfully.
+- [ ] Valid clean authorization permits restricted execution.
 
-**A printed warning is not enforcement.**
+Prove refusal through the absence of a process-start event.
 
-Prove denied launch through the absence of a process-start event, not only a red UI badge.
+## 4.7 Publication reliability
+
+Track separately:
+
+```text
+Report stored
+Hedera receipt confirmed
+Authorization transaction confirmed
+Graph indexed
+```
+
+- [ ] Retry incomplete publication durably.
+- [ ] Do not mark authorization ready while required publication is missing.
+- [ ] Do not treat Graph indexing delay as a new security verdict.
+- [ ] Do not claim the application implements a trustless cross-chain bridge.
+
+## Exit criteria
+
+- [ ] A paid request reaches an audit.
+- [ ] Policy evaluation is connected to the decision.
+- [ ] Public receipts match report commitments.
+- [ ] Live Graph history is consumed.
+- [ ] The gateway blocks and permits actual execution correctly.
+- [ ] Any external integration gaps remain explicitly unchecked.
 
 ---
 
-## 10. CLI and MCP
+# Phase 5 — Finish CLI, MCP, and Next.js Interfaces
 
-### Minimum CLI
+**Timebox: 25 minutes**
 
-Provide these capabilities through existing commands or thin new commands:
+## Goal
+
+Expose the same working system through developer, agent, and visual interfaces.
+
+## 5.1 CLI
+
+Support these capabilities using existing commands or thin wrappers:
 
 ```text
 safe402 doctor
@@ -550,15 +563,16 @@ safe402 demo
 ```
 
 - [ ] Human-readable output.
-- [ ] JSON output for automation.
-- [ ] Errors on stderr.
-- [ ] Non-zero exit on denied execution.
-- [ ] Job ID returned for pending work.
-- [ ] No automatic execution after an incomplete audit.
+- [ ] JSON output.
+- [ ] Diagnostic logs on stderr.
+- [ ] Non-zero exit for denied execution.
+- [ ] Job IDs for pending audits.
+- [ ] No automatic execution after incomplete verification.
+- [ ] Clear simulation/live indicators.
 
-Do not spend time building a large command framework.
+Do not create a large CLI framework.
 
-### Minimum MCP
+## 5.2 MCP
 
 Expose:
 
@@ -569,183 +583,199 @@ safe402_check_status
 safe402_execute_tool
 ```
 
-- [ ] Reuse the same service methods as the CLI.
-- [ ] Use stdio transport for the sprint.
+- [ ] Use stdio transport.
+- [ ] Reuse CLI service methods.
 - [ ] Keep signing in a restricted adapter.
 - [ ] Reject caller-supplied approval flags.
-- [ ] Return structured decisions.
+- [ ] Return structured results.
 
-### Reference agent
+## 5.3 Reference agent
 
-- [ ] Reuse the existing agent integration if functional.
-- [ ] Allow only Safe402 operations and bounded payment.
-- [ ] Do not expose an unrestricted shell.
+- [ ] Reuse an existing agent integration if functional.
+- [ ] Limit it to Safe402 tools and bounded payment.
+- [ ] Do not give it an unrestricted shell.
 - [ ] Show an actual agent call when claiming agent integration.
 
-A deterministic demo script remains useful, but label it accurately if no model-driven agent is connected.
+If the demonstration uses deterministic orchestration only, label it as a demo script.
 
----
+## 5.4 Next.js audit list
 
-## 11. Two-Screen Next.js Frontend
+Preserve the existing Pages Router and styling.
 
-Preserve existing Next.js Pages Router, styling, and compatible components.
+Show:
 
-### Audit list
-
-- [ ] Tool name and version.
+- [ ] Tool and version.
 - [ ] Job status.
 - [ ] Decision.
 - [ ] Timestamp.
-- [ ] Link to detail.
-- [ ] Compact network and integration indicators.
+- [ ] Detail link.
+- [ ] Network and integration indicators.
 
-### Audit detail
+## 5.5 Next.js audit detail
+
+Show:
 
 - [ ] Artifact identity.
 - [ ] Decision and explanation.
-- [ ] Declared-versus-observed table.
+- [ ] Declared-versus-observed comparison.
 - [ ] Real progress events.
-- [ ] Findings and evidence references.
+- [ ] Findings.
+- [ ] Evidence references.
 - [ ] Payment receipt.
 - [ ] HCS reference.
 - [ ] CRE execution mode.
 - [ ] Authorization and expiry.
 - [ ] Graph freshness.
-- [ ] Gateway execution outcome.
+- [ ] Gateway outcome.
 
-### Frontend implementation defaults
+### Frontend defaults
 
-- Poll every two seconds while an audit is active.
+- Poll active jobs every two seconds.
 - Stop polling terminal jobs.
-- Reuse SSE only if already working.
+- Reuse SSE only if already functional.
 - Render untrusted descriptions as inert text.
 - Abbreviate hashes with copy controls.
-- Use existing colors and typography.
-- Display unknown or unavailable values honestly.
+- Show unavailable values honestly.
+- Do not add a new design system.
 
-Do not create a new submission form, policy editor, wallet flow, or separate demo screen.
+## Exit criteria
 
-**Acceptance:** an audit started from the terminal appears in the list and updates on its detail page.
+- [ ] CLI can operate the core flow without a browser.
+- [ ] MCP accesses the same service.
+- [ ] A terminal-started audit appears in the dashboard.
+- [ ] Dashboard results match the CLI.
+- [ ] No frontend badge substitutes for backend enforcement.
 
 ---
 
-## 12. End-to-End Demonstration
+# Phase 6 — Run the Demo and Verify
 
-Implement one repeatable demo command.
+**Timebox: 25 minutes**
 
-### Prerequisites
+## Goal
+
+Make the demonstration reproducible and repair critical failures.
+
+## 6.1 Demo prerequisites
 
 - [ ] Testnet payer funded.
-- [ ] Fixed maximum spend configured.
-- [ ] Policy registered.
-- [ ] Two fixture artifacts prepared.
+- [ ] Maximum spend configured.
+- [ ] Policy available.
+- [ ] Both fixtures prepared.
 - [ ] Integration configuration checked.
-- [ ] Browser can open the audit list.
+- [ ] Dashboard reachable.
 
-### Demo sequence
+## 6.2 Demo sequence
 
-1. Print active network and confidential execution mode.
+1. Print network and confidential execution mode.
 2. Select the blocked fixture.
-3. Resolve its artifact hash.
+3. Resolve its exact artifact.
 4. Query existing history.
-5. Request a new audit when needed.
-6. Obtain and validate the quote.
-7. Pay through the restricted adapter.
+5. Request verification.
+6. Validate the quote.
+7. Complete payment.
 8. Print settlement reference.
-9. Run the actual tests.
-10. Show the credential-access observation.
-11. Evaluate policy through CRE.
-12. Persist and publish the result.
-13. Display the report URL.
+9. Run tests.
+10. Show actual credential-access evidence.
+11. Evaluate the policy.
+12. Publish the report and provenance.
+13. Print the report URL.
 14. Attempt gateway execution.
-15. Show that launch was refused.
+15. Demonstrate refusal.
 16. Select the clean fixture.
 17. Obtain or reuse a valid subject-bound authorization.
 18. Execute through the gateway.
-19. Print its output.
-20. Query the resulting history through The Graph.
+19. Print its result.
+20. Query live history.
 
-If the clean fixture was audited before the demonstration, state that explicitly.
+Clearly label previously completed audits.
 
-### Optional final step
+### Optional extension
 
-If revocation is ready:
+If already reliable:
 
-1. Revoke the clean fixture’s authorization.
+1. Revoke the clean authorization.
 2. Attempt another invocation.
 3. Show refusal.
 
-Do not add this to the recording until the basic demo is reliable.
+## 6.3 Required checks
 
----
-
-## 13. Minutes 140–165: Verification
-
-Run focused tests appropriate to the changed code.
-
-| Test | Expected outcome |
+| Test | Expected result |
 |---|---|
-| Clean fixture | Compatible approval and restricted execution |
+| Clean fixture | Restricted execution succeeds |
 | Credential-access fixture | Actual observation and block |
-| Incomplete collector | No approval |
+| Collector failure | No approval |
 | Missing LLM configuration | No canned approval |
 | Changed artifact | Launch denied |
-| Invalid report signature | Launch denied |
+| Invalid signature | Launch denied |
 | Expired authorization | Launch denied |
 | Revoked authorization | Next invocation denied |
-| Repeated paid request | Existing job; no second charge |
-| Graph response | Real hosted data and freshness |
-| CRE output | Policy affects decision; mode disclosed |
-| Dashboard | Same audit and evidence as CLI |
+| Repeated payment request | Same job without another charge |
+| Graph query | Actual hosted data |
+| CRE evaluation | Policy affects decision |
+| Dashboard | Same audit as CLI |
 
-Checklist:
-
-- [ ] Run type checking or the project’s equivalent.
-- [ ] Run the existing build.
-- [ ] Run focused security and payment tests.
-- [ ] Run the full demo once.
+- [ ] Run type checking.
+- [ ] Run the project build.
+- [ ] Run focused tests.
+- [ ] Run the complete demo.
 - [ ] Repair failures.
-- [ ] Rerun only affected checks.
-- [ ] Capture transaction, workflow, and query evidence.
+- [ ] Rerun affected checks.
+- [ ] Capture integration evidence.
 
-Do not spend the remaining time on unrelated lint cleanup or broad refactoring.
+Do not spend this phase on unrelated cleanup.
+
+## Exit criteria
+
+- [ ] The main demo completes reproducibly.
+- [ ] Failures are either repaired or documented.
+- [ ] No unverified feature is presented as complete.
 
 ---
 
-## 14. Minutes 165–180: Handoff
+# Phase 7 — Freeze and Handoff
 
-### Required deliverables
+**Timebox: 15 minutes**
 
-- [ ] Working source changes.
-- [ ] Updated checklist with evidence.
-- [ ] Exact install and run commands.
-- [ ] Environment-variable example without secrets.
-- [ ] Demo command.
-- [ ] Dashboard URL or local command.
-- [ ] Test results.
-- [ ] Integration references.
-- [ ] Known limitations.
-- [ ] Continuity disclosure.
+## Goal
 
-### Final coding-agent response format
+Deliver an understandable, reproducible project.
+
+## Tasks
+
+- [ ] Freeze feature additions.
+- [ ] Fix only demo-breaking issues.
+- [ ] Update the checklist with evidence.
+- [ ] Write exact install commands.
+- [ ] Write exact run commands.
+- [ ] Provide an environment example without secrets.
+- [ ] Provide the demo command.
+- [ ] Provide dashboard access instructions.
+- [ ] Record test results.
+- [ ] Record partner references.
+- [ ] Document reused versus newly implemented functionality.
+- [ ] Document limitations and deferred work.
+
+## Final report format
 
 ```markdown
 ## Delivered
-- Implemented or verified capabilities.
+- Verified existing capabilities.
+- Newly implemented capabilities.
 
 ## Run
-- Exact commands.
+- Exact setup and execution commands.
 
 ## Verified
-- Tests and end-to-end results.
+- Tests and end-to-end outcomes.
 
 ## Partner evidence
 - Hedera payment and HCS references.
 - CRE execution mode and reference.
-- Graph deployment and successful query.
+- Graph deployment and query evidence.
 
 ## Remaining
-- Unchecked requirements.
+- Partial requirements.
 - External blockers.
 - Deferred features.
 
@@ -754,11 +784,58 @@ Do not spend the remaining time on unrelated lint cleanup or broad refactoring.
 - Whether the demo is reproducible.
 ```
 
-Do not say “finished” if the main flow cannot run.
+---
 
-### Completion standard
+## Reference Library
 
-The three-hour sprint succeeds when the coding agent delivers a reproducible CLI/MCP security flow, real observed behavior, actual execution enforcement, inspectable results, and accurately reported partner integration status.
+### Hedera and payments
 
-Full three-partner readiness requires all three integrations to work as specified. External blockers may prevent that within three hours; they must be reported rather than hidden.
+- [Hedera x402 overview](https://hedera.com/blog/hedera-and-the-x402-payment-standard/)
+- [Hedera code snippets](https://github.com/hedera-dev/hedera-code-snippets)
+- [Blocky402](https://blocky402.com/)
+- [Paid-request example](https://github.com/hedera-dev/x402-inference-pay-per-request-poc)
+- [Hedera Agent Kit](https://github.com/hashgraph/hedera-agent-kit-js)
+- [Hedera documentation](https://docs.hedera.com/)
+- [scaffold-hbar](https://github.com/hedera-dev/scaffold-hbar)
+- [x402 protocol](https://github.com/x402-foundation/x402)
 
+### Chainlink
+
+- [CRE documentation](https://docs.chain.link/cre)
+- [Hello Confidential Workflows](https://docs.chain.link/cre-templates/hello-confidential-workflows)
+- [Hello workflow source](https://github.com/smartcontractkit/cre-templates/tree/main/starter-templates/hello-confidential-workflows)
+- [AI Audit Firewall](https://docs.chain.link/cre-templates/ai-audit-firewall)
+- [Audit Firewall source](https://github.com/smartcontractkit/cre-templates/tree/main/starter-templates/confidential-workflows/ai-audit-firewall)
+- [Automated Liquidation Protection](https://docs.chain.link/cre-templates/automated-liquidation-protection)
+- [Liquidation template source](https://github.com/smartcontractkit/cre-templates/tree/main/starter-templates/confidential-workflows/automated-liquidation-protection)
+- [Confidential templates](https://github.com/smartcontractkit/cre-templates/tree/main/starter-templates/confidential-workflows)
+- [Confidential bootcamp](https://smartcontractkit.github.io/CRE-Confidential-bootcamp/)
+
+Use liquidation references only for private-policy and constraint-enforcement patterns. Do not add liquidation functionality.
+
+### The Graph
+
+- [Subgraph MCP introduction](https://thegraph.com/docs/en/subgraphs/tooling/subgraph-mcp/introduction/)
+- [Subgraphs Skills](https://github.com/graphprotocol/subgraphs-skills)
+- [Substreams Skills](https://github.com/streamingfast/substreams-skills)
+
+Substreams is a deferred reference, not a required implementation.
+
+---
+
+## Definition of Done
+
+The sprint is complete when:
+
+- [ ] Safe402 works through CLI and MCP.
+- [ ] A controlled tool actually runs during auditing.
+- [ ] Its behavior produces real evidence.
+- [ ] Evidence and policy determine the decision.
+- [ ] The gateway genuinely prevents forbidden execution.
+- [ ] A clean authorized tool executes successfully.
+- [ ] The dashboard displays the same results.
+- [ ] Available partner integrations are verified with real evidence.
+- [ ] Missing integrations are explicitly reported.
+- [ ] The demonstration is reproducible.
+
+**Full three-partner readiness requires all three integrations to pass their acceptance checks. The deadline does not justify fabricated success or weakened security claims.**
