@@ -1,0 +1,17 @@
+schemaVersion: "1.0"
+name: research-agent
+rules:
+  requireCompleteCoverage: true
+  blockUndeclaredCapabilities: true
+  wallet:
+    allowSigning: false
+    allowTransactions: false
+  process:
+    allowSpawn: false
+  filesystem:
+    allowedPaths: []
+  network:
+    allowedHosts:
+      - prices.example.test
+authorization:
+  ttlSeconds: 3600
