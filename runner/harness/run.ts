@@ -1,10 +1,10 @@
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { z } from 'zod';
 import { hashCanonical } from '../../src/canonical/hash.js';
 import type { Artifact, Coverage, ExecutionProfile, Observation } from '../../src/domain/types.js';
 import { parseStrace } from '../collectors/strace.js';
-import { DependencyUnavailable, assertDocker, dockerKill, dockerRun } from './docker.js';
+import { DependencyUnavailable, assertDocker, dockerExtractTrace, dockerKill, dockerRun, dockerVolumeRm } from './docker.js';
 import { McpDriver } from './mcp.js';
 
 export interface RunResult { observations: Observation[]; coverage: Coverage; exitCode: number | null; timedOut: boolean; collectorError: string | null; stderr: string; testResults: Record<string, unknown> }
@@ -12,6 +12,7 @@ export interface RunResult { observations: Observation[]; coverage: Coverage; ex
 export class ProfileError extends Error {}
 
 const MAX_STDERR_BYTES = 1024 * 1024;
+const MAX_TRACE_BYTES = 64 * 1024 * 1024;
 const GRACE_MS = 5000;
 const TRUNCATION_NOTE = 'tool output beyond 1 MiB was discarded and is not represented in this run';
 
@@ -49,9 +50,6 @@ const CANARY_CONTENT: Record<string, string> = {
   '/home/tool/.env': 'SECRET_TOKEN=safe402-synthetic-canary-not-real\n',
 };
 
-/** Single-quote for `sh -c`, so artifact- and profile-supplied strings cannot break out of the command. */
-const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
 /** The files resolveArtifact hashed: same walk, same exclusions. node_modules/.git/symlinks never reach the container. */
 function copyHashedFiles(root: string, dest: string): void {
   const stack = [root];
@@ -82,21 +80,23 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
   chmodSync(homeDir, 0o777);
 
   const name = `safe402-${auditId}`;
+  const volume = `safe402-obs-${auditId}`;
   const strace = opts.straceBin ?? 'strace';
-  // /obs is a root-only tmpfs the tool cannot read, write, or unlink; the host bind is /out, and root
-  // copies the trace there only after the traced process has exited.
+  // /obs is a named volume seeded from the image's root-only 0700 directory: the tool cannot read,
+  // write, or unlink the trace, and no host directory is writable from inside the tool container.
+  // The trace is copied out afterwards by a trusted helper container, so a killed run cannot
+  // deliver tool-authored evidence.
   const args = ['-i', '--rm', '--name', name, '--network', profile.network, '--read-only',
-    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m', '--tmpfs', '/obs:rw,mode=0700,size=64m',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m', '-v', `${volume}:/obs`,
     '--memory', String(profile.memoryBytes), '--memory-swap', String(profile.memoryBytes), '--pids-limit', String(profile.pidsLimit),
     // SETUID/SETGID are required for `strace -u <toolUser>` to drop privileges for the traced child;
     // the tool process itself ends up unprivileged (uid nobody, no caps, no-new-privileges).
     '--cap-drop', 'ALL', '--cap-add', 'SYS_PTRACE', '--cap-add', 'SETUID', '--cap-add', 'SETGID', '--security-opt', 'no-new-privileges',
-    '-v', `${artDir}:/artifact:ro`, '-v', `${homeDir}:/home/tool`, '-v', `${obsDir}:/out`];
+    '-v', `${artDir}:/artifact:ro`, '-v', `${homeDir}:/home/tool`];
   for (const [k, v] of Object.entries(profile.env)) args.push('-e', `${k}=${v}`);
-  const traced = [shq(strace), '-f', '-u', shq(profile.toolUser), '-o', '/obs/trace.log',
-    '-e', shq('trace=openat,open,connect,sendto,execve,clone,clone3,fork,vfork'), '-s', '256', '-ttt',
-    'node', shq(`/artifact/${artifact.entrypoint}`)].join(' ');
-  args.push(profile.image, 'sh', '-c', `${traced}; rc=$?; rm -f /out/trace.log; cat /obs/trace.log > /out/trace.log 2>/dev/null; exit $rc`);
+  args.push(profile.image, strace, '-f', '-u', profile.toolUser, '-o', '/obs/trace.log',
+    '-e', 'trace=openat,open,connect,sendto,execve,clone,clone3,fork,vfork', '-s', '256', '-ttt',
+    'node', `/artifact/${artifact.entrypoint}`);
 
   const child = dockerRun(args);
   let stderr = ''; let stderrTruncated = false;
@@ -109,7 +109,7 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
   const testWindows: { testId: string; start: number; end: number }[] = [];
   const testResults: Record<string, unknown> = {};
   const completed: string[] = []; const skipped: { testId: string; reason: string }[] = [];
-  let timedOut = false; let spawnError: Error | null = null;
+  let timedOut = false; let spawnError = null as Error | null;
   const deadline = setTimeout(() => { timedOut = true; dockerKill(name); driver.failAll('deadline'); }, profile.deadlineMs);
   const exited = new Promise<number | null>((resolve) => {
     child.on('exit', (code) => resolve(code));
@@ -141,14 +141,24 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
     ]);
   } finally {
     clearTimeout(deadline);
+    // The tool container must be gone before the trace is extracted, on every path including a throw.
+    dockerKill(name);
+    dockerExtractTrace(volume, obsDir, profile.image);
+    dockerVolumeRm(volume);
     rmSync(homeDir, { recursive: true, force: true }); rmSync(artDir, { recursive: true, force: true });
   }
-  if (spawnError) throw new DependencyUnavailable(`docker run failed: ${(spawnError as Error).message}`);
+  if (spawnError) throw new DependencyUnavailable(`docker run failed: ${spawnError.message}`);
 
   const tracePath = join(obsDir, 'trace.log');
   let collectorError: string | null = null; let observations: Observation[] = []; let baselineOpens = 0;
-  if (!existsSync(tracePath) || readFileSync(tracePath, 'utf8').trim() === '') collectorError = 'trace log missing';
-  else { const parsed = parseStrace(readFileSync(tracePath, 'utf8'), { auditId, profile, evidenceReference: `local:runs/${auditId}/trace.log`, testWindows }); observations = parsed.observations; baselineOpens = parsed.baselineOpens; }
+  let text: string | null = null;
+  try {
+    const st = lstatSync(tracePath);
+    if (!st.isFile()) collectorError = 'trace log missing';
+    else if (st.size > MAX_TRACE_BYTES) collectorError = 'trace log too large';
+    else { text = readFileSync(tracePath, 'utf8'); if (text.trim() === '') { collectorError = 'trace log missing'; text = null; } }
+  } catch { collectorError = 'trace log missing'; }
+  if (text !== null) { const parsed = parseStrace(text, { auditId, profile, evidenceReference: `local:runs/${auditId}/trace.log`, testWindows }); observations = parsed.observations; baselineOpens = parsed.baselineOpens; }
   if (collectorError) { const i = completed.indexOf('credential_canary'); if (i >= 0) { completed.splice(i, 1); skipped.push({ testId: 'credential_canary', reason: collectorError }); } }
 
   const unsupported = ['environment-variable reads after process start are not observable by strace', 'hostnames of failed DNS lookups are not recovered in this profile'];
