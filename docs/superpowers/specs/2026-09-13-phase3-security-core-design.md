@@ -144,7 +144,7 @@ Disclosed limitations, written into coverage `unsupported`: environment-variable
 
 Runs over every `.js`/`.mjs`/`.cjs` file in the artifact. Detectors are regexes with rule IDs:
 
-`FS_ACCESS` (`require("fs")`, `fs/promises`, `readFileSync`), `ENV_READ` (`process.env`), `CHILD_PROCESS` (`child_process`, `execSync`, `spawn`), `DYNAMIC_CODE` (`eval(`, `new Function(`, `vm.`), `NETWORK_TARGET` (string literal `http(s)://host`), `WALLET_API` (`signTransaction`, `privateKey`, `sendTransaction`), `SUSPICIOUS_DESCRIPTION` (tool description containing "ignore previous", "system prompt", "you must"). Each finding has the PRD 13.3 fields with `sourceType: "STATIC"`, `confidence` 0.6 for regex hits, `analyzerVersion: "regex-v1"`. If any file fails to read, coverage records `staticIncomplete: true`.
+`FS_ACCESS` (`require("fs")`, `fs/promises`, `readFileSync`), `ENV_READ` (`process.env`), `CHILD_PROCESS` (`child_process`, `execSync`, `spawn`), `DYNAMIC_CODE` (`eval(`, `new Function(`, `vm.`), `NETWORK_TARGET` (string literal `http(s)://host`), `WALLET_API` (`signTransaction`, `privateKey`, `sendTransaction`), `SUSPICIOUS_DESCRIPTION` (tool description containing "ignore previous", "system prompt", "you must"). Each finding has the PRD 13.3 fields with `sourceType: "STATIC"`, `confidence` 60 for regex hits (an integer percent: canonical JSON accepts integers only), `analyzerVersion: "regex-v1"`. If any file fails to read, coverage records `staticIncomplete: true`.
 
 ### 9. Evidence bundle (`src/evidence/bundle.ts`)
 

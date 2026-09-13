@@ -31,7 +31,7 @@ describe('scanArtifact', () => {
     expect(blocked.findings.map((f) => f.ruleId)).toEqual(expect.arrayContaining(['FS_ACCESS', 'ENV_READ', 'NETWORK_TARGET']));
     expect(clean.findings.map((f) => f.ruleId)).not.toContain('FS_ACCESS');
     expect(clean.findings.map((f) => f.ruleId)).toContain('NETWORK_TARGET');
-    for (const f of blocked.findings) { expect(f.sourceType).toBe('STATIC'); expect(f.location.line).toBeGreaterThan(0); expect(f.analyzerVersion).toBe('regex-v1'); }
+    for (const f of blocked.findings) { expect(f.sourceType).toBe('STATIC'); expect(f.location.line).toBeGreaterThan(0); expect(f.analyzerVersion).toBe('regex-v1'); expect(f.confidence).toBe(60); }
     expect(blocked.staticIncomplete).toBe(false);
   });
 

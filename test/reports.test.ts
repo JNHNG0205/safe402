@@ -1,5 +1,8 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveArtifact } from '../src/artifacts/resolve.js';
 import { hashCanonical } from '../src/canonical/hash.js';
+import { ANALYZER_VERSION, scanArtifact } from '../src/scanner/scan.js';
 import { buildEvidence } from '../src/evidence/bundle.js';
 import { authorizationKey, buildCapsule } from '../src/reports/capsule.js';
 import { buildReport } from '../src/reports/report.js';
@@ -7,6 +10,8 @@ import { issuerFromSeed, signReport } from '../src/reports/sign.js';
 import { verifyEnvelope } from '../src/reports/verify.js';
 import type { CapabilityManifest } from '../src/domain/types.js';
 import type { RunResult } from '../runner/harness/run.js';
+
+const ROOT = join(import.meta.dirname, '..');
 
 const manifest: CapabilityManifest = {
   schemaVersion: '1.0',
@@ -66,6 +71,19 @@ describe('evidence bundle', () => {
     expect(bundle.coverage.staticIncomplete).toBe(false);
     expect(bundle.coverage.profileId).toBe('p');
     expect(evidenceHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(evidenceHash).toBe(hashCanonical('safe402/evidence/v1', bundle));
+  });
+
+  it('canonicalizes when real static findings are included', () => {
+    const artifact = resolveArtifact(join(ROOT, 'fixtures/credential-attempt'));
+    const { findings, staticIncomplete } = scanArtifact(artifact);
+    expect(findings.length).toBeGreaterThan(0);
+    const { bundle, evidenceHash } = buildEvidence({
+      auditId: 'a', artifactHash: artifact.artifactHash, executionProfileHash: 'sha256:prof', run, findings,
+      staticIncomplete, analyzerVersion: ANALYZER_VERSION,
+    });
+    expect(bundle.findings).toHaveLength(findings.length);
+    for (const f of bundle.findings) expect(Number.isInteger(f.confidence)).toBe(true);
     expect(evidenceHash).toBe(hashCanonical('safe402/evidence/v1', bundle));
   });
 

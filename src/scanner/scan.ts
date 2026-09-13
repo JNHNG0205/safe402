@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import type { Artifact, Finding } from '../domain/types.js';
 import { DETECTORS } from './detectors.js';
 export const ANALYZER_VERSION = 'regex-v1';
+/** Confidence is an integer percent: canonical JSON accepts integers only, so a regex hit is 60, not 0.6. */
+export const STATIC_CONFIDENCE = 60;
 
 function jsFiles(root: string): { files: string[]; incomplete: boolean } {
   const out: string[] = []; const stack = [root]; let incomplete = false;
@@ -33,7 +35,7 @@ export function scanArtifact(artifact: Artifact): { findings: Finding[]; staticI
       for (const d of DETECTORS) if (d.pattern.test(line)) {
         const id = createHash('sha256').update(`${artifact.artifactHash}|${rel}|${i + 1}|${d.ruleId}`).digest('hex').slice(0, 16);
         findings.push({ findingId: `finding_${id}`, ruleId: d.ruleId, sourceType: 'STATIC', severity: d.severity, file: rel, location: { line: i + 1 },
-          description: d.description, evidenceReference: `artifact:${rel}#L${i + 1}`, confidence: 0.6, analyzerVersion: ANALYZER_VERSION });
+          description: d.description, evidenceReference: `artifact:${rel}#L${i + 1}`, confidence: STATIC_CONFIDENCE, analyzerVersion: ANALYZER_VERSION });
       }
     });
   }
