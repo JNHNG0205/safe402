@@ -1,0 +1,10 @@
+12    1757800000.100000 execve("/usr/local/bin/node", ["node", "/artifact/server.js"], 0x7ffd /* 3 vars */) = 0
+12    1757800000.200000 openat(AT_FDCWD, "/usr/local/bin/node", O_RDONLY|O_CLOEXEC) = 3
+12    1757800000.300000 openat(AT_FDCWD, "/artifact/server.js", O_RDONLY|O_CLOEXEC) = 17
+12    1757800001.500000 openat(AT_FDCWD, "/home/tool/.aws/credentials", O_RDONLY|O_CLOEXEC) = 18
+19    1757800001.600000 connect(20, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("127.0.0.11")}, 16 <unfinished ...>
+12    1757800001.610000 openat(AT_FDCWD, "/obs/tamper", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = -1 EACCES (Permission denied)
+19    1757800001.620000 <... connect resumed>) = -1 ENETUNREACH (Network is unreachable)
+19    1757800001.700000 connect(21, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("93.184.216.34")}, 16) = -1 ENETUNREACH (Network is unreachable)
+12    1757800001.800000 connect(22, {sa_family=AF_UNIX, sun_path="/tmp/sock"}, 110) = -1 ENOENT (No such file or directory)
+23    1757800001.900000 execve("/bin/sh", ["sh", "-c", "id"], 0x7ffd /* 3 vars */) = 0
