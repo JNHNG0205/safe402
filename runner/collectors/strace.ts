@@ -13,11 +13,11 @@ function parseLines(text: string): Call[] {
   const calls: Call[] = [];
   for (const raw of text.split('\n')) {
     const m = LINE.exec(raw.trim()); if (!m) continue;
-    const [, pid, tsStr, body0] = m; const ts = Number(tsStr);
+    const [, pid, tsStr, body0] = m; let ts = Number(tsStr);
     let body = body0!;
     if (body.endsWith('<unfinished ...>')) { pending.set(pid!, { ts, body: body.replace(/\s*<unfinished \.\.\.>$/, '') }); continue; }
     const r = RESUMED.exec(body);
-    if (r) { const p = pending.get(pid!); if (!p) continue; pending.delete(pid!); body = p.body + r[2]; }
+    if (r) { const p = pending.get(pid!); if (!p) continue; pending.delete(pid!); body = p.body + r[2]; ts = p.ts; }
     const c = CALL.exec(body); if (!c) continue;
     calls.push({ pid: pid!, ts, name: c[1]!, args: c[2]!, result: c[3] === '?' ? null : Number(c[3]), errno: c[4] ?? null });
   }
@@ -25,6 +25,10 @@ function parseLines(text: string): Call[] {
 }
 
 function firstQuoted(args: string): string | null { const m = /"((?:[^"\\]|\\.)*)"/.exec(args); return m ? m[1]! : null; }
+function flagsAfterQuoted(args: string): string {
+  const m = /"(?:[^"\\]|\\.)*"\s*,\s*([^,]*)/.exec(args);
+  return m ? m[1]!.trim() : '';
+}
 function inetTarget(args: string): { ip: string; port: number } | null {
   const port = /sin6?_port=htons\((\d+)\)/.exec(args); const v4 = /inet_addr\("([^"]+)"\)/.exec(args); const v6 = /inet_pton\(AF_INET6, "([^"]+)"/.exec(args);
   if (!port || !(v4 || v6)) return null; return { ip: (v4 ?? v6)![1]!, port: Number(port[1]) };
@@ -43,9 +47,10 @@ export function parseStrace(text: string, ctx: ParseContext): { observations: Ob
     const ok = c.result !== null && c.result >= 0;
     if (c.name === 'openat' || c.name === 'open') {
       const path = firstQuoted(c.name === 'openat' ? c.args.replace(/^[^,]*,\s*/, '') : c.args); if (!path) continue;
-      const write = /O_WRONLY|O_RDWR|O_CREAT|O_TRUNC/.test(c.args);
+      const write = /O_WRONLY|O_RDWR|O_CREAT|O_TRUNC/.test(flagsAfterQuoted(c.args));
       const denied = c.errno === 'EACCES' || c.errno === 'EPERM' || c.errno === 'EROFS';
-      if (!write && !path.startsWith('/home/tool')) { baselineOpens++; continue; }
+      const isCanaryOrHome = path.startsWith('/home/tool/') || ctx.profile.canaries.some((canary) => canary.path === path);
+      if (!write && !isCanaryOrHome) { baselineOpens++; continue; }
       push(c, 'FILESYSTEM', write ? 'WRITE' : 'READ', path, ok || !denied, ok);
     } else if (c.name === 'connect' || c.name === 'sendto') {
       if (c.args.includes('AF_UNIX')) continue;
