@@ -156,7 +156,7 @@ Phase 3.3.
 6. Verify (25 min) → reproducible demo, type check, build, focused tests.
 7. Handoff (15 min) → commands, evidence, checklist, limitations.
 
-Do not start with frontend styling. Do not mark a phase complete unless its exit criteria pass.
+The time windows are not binding (owner decision 2026-09-13): keep the phase order and exit criteria, but do the work properly rather than trimming to a clock. Do not start with frontend styling. Do not mark a phase complete unless its exit criteria pass.
 
 ## Key interfaces
 
