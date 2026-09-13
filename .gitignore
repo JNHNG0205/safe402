@@ -36,3 +36,6 @@ cre/**/.cre/
 # Logs and OS
 *.log
 .DS_Store
+
+# SDD scratch
+.superpowers/
