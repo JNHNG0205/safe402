@@ -41,7 +41,7 @@ Spike settlements (1 tinybar each, throwaway server and client, not the product)
 
 Facilitator endpoints: `GET /supported`, `GET /health`, `POST /verify`, `POST /settle` at the root. No API key. No OpenAPI spec.
 
-## Chainlink CRE (probed 2026-09-13, simulator blocked on login)
+## Chainlink CRE (verified in simulation 2026-09-13)
 
 | Item | Value |
 |---|---|
@@ -55,7 +55,8 @@ Facilitator endpoints: `GET /supported`, `GET /health`, `POST /verify`, `POST /s
 | TEE | AWS Nitro, `us-west-2` (only registered TEE) |
 | Confidential Workflows access | private beta, invite-only; simulation needs only a CRE account |
 | Local build evidence | `cre workflow build` → WASM, binary hash `dbf9129b9ae24cc95bed3618162b256d298bdc9fe66653c2bbdc4ea5f7dc7ffe` |
-| Simulator run | pending `cre login` |
+| Simulator run | `ALLOW (score: 60)` at threshold 60, `BLOCK (score: 60)` at threshold 30; config hash `e93aacf99c2a64a1e14df7307b6a991c657c776620c4ec9b664e7e0282365fd3` |
+| Account | org `org_lwaVcKVeeXwUiv6i`; Deploy Access: Not enabled |
 
 ## EVM testnet (authorization registry and CRE delivery)
 

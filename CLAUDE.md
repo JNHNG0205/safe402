@@ -114,6 +114,7 @@ Use the superpowers plugin skills. If a skill might apply, invoke it before acti
 | Before claiming anything is done | `superpowers:verification-before-completion` |
 | Before merging or handing off | `superpowers:requesting-code-review`, `superpowers:finishing-a-development-branch` |
 | Isolated feature work | `superpowers:using-git-worktrees` |
+| Any Chainlink CRE work: workflow code, `cre` CLI, simulation, secrets, TEE handlers, consumer contracts, deploy | `chainlink-cre-skill` (always, alongside the superpowers process skill) |
 
 Announce which skill is in use. Never mark a spec checklist item complete without running the verification the skill requires.
 
