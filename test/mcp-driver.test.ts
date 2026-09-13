@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { McpDriver } from '../runner/harness/mcp.js';
@@ -18,5 +19,15 @@ describe('McpDriver', () => {
     child.stdout.pause();
     await expect(slow.request('tools/list', {})).rejects.toThrow(/timeout/);
     child.kill();
+  });
+  it('caps the output buffer and keeps working after a flood', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const d = new McpDriver(input, output, 2000);
+    const pending = d.request('tools/list', {});
+    output.write('x'.repeat(2 * 1024 * 1024)); // a 2 MiB line that will never terminate
+    await new Promise((r) => setImmediate(r));
+    expect(d.truncated).toBe(true);
+    output.write(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { tools: [] } }) + '\n');
+    await expect(pending).resolves.toEqual({ tools: [] });
   });
 });

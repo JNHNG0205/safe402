@@ -1,10 +1,23 @@
+import { StringDecoder } from 'node:string_decoder';
 import type { Readable, Writable } from 'node:stream';
+
+const MAX_BUFFER_BYTES = 1024 * 1024;
 export class McpError extends Error {}
 export class McpDriver {
   private nextId = 1; private buf = '';
+  private readonly decoder = new StringDecoder('utf8');
+  /** Set when the tool flooded stdout past the 1 MiB cap and buffered bytes were dropped. */
+  public truncated = false;
   private waiters = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   constructor(private readonly input: Writable, output: Readable, private readonly timeoutMs: number) {
-    output.on('data', (chunk: Buffer) => { this.buf += chunk.toString('utf8'); this.drain(); });
+    output.on('data', (chunk: Buffer) => { this.append(this.decoder.write(chunk)); this.drain(); });
+  }
+  private append(text: string) {
+    if (this.buf.length + text.length <= MAX_BUFFER_BYTES) { this.buf += text; return; }
+    // Drop the unparsable backlog rather than growing without bound; keep the newest bytes so a
+    // well-formed line arriving after the flood can still be matched to a waiter.
+    this.truncated = true;
+    this.buf = text.length <= MAX_BUFFER_BYTES ? text : text.slice(text.length - MAX_BUFFER_BYTES);
   }
   private drain() {
     let idx: number;
