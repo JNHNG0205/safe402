@@ -33,6 +33,19 @@ describe('JobRepo', () => {
     const again = new JobRepo(openDb(path));
     expect(again.getJob('a1')!.status).toBe('SCANNING');
   });
+  it('refuses a transition from a worker whose lease was reassigned', () => {
+    const repo = new JobRepo(openDb(tmpDb()));
+    repo.createJob(job('a1'));
+    expect(repo.claimNext('w1', 1000)!.lease_owner).toBe('w1');
+    repo.transition('a1', 'SCANNING', { stageCheckpoint: 'artifact' }, 'w1');
+    repo.sweepExpiredLeases(1061);
+    expect(repo.claimNext('w2', 5000)!.lease_owner).toBe('w2');
+    expect(() => repo.transition('a1', 'SCANNING', { stageCheckpoint: 'stale' }, 'w1')).toThrow('lease lost');
+    expect(repo.getJob('a1')!.status).toBe('PREPARING');
+    expect(repo.getJob('a1')!.stage_checkpoint).toBeNull();
+    repo.transition('a1', 'SCANNING', { stageCheckpoint: 'artifact' }, 'w2');
+    expect(repo.getJob('a1')!.status).toBe('SCANNING');
+  });
   it('sweeps expired leases back to QUEUED until attempts exhausted', () => {
     const repo = new JobRepo(openDb(tmpDb()));
     repo.createJob(job('a1'));

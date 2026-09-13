@@ -86,13 +86,21 @@ export class JobRepo {
     this.db.prepare(`UPDATE audit_jobs SET lease_expires_at=?, updated_at=? WHERE audit_id=? AND lease_owner=?`).run(at + LEASE_SECONDS, at, auditId, owner);
   }
 
-  transition(auditId: string, to: JobStatus, patch: { stageCheckpoint?: string; lastError?: string } = {}) {
+  /**
+   * Moves a job to `to`. When `owner` is supplied the write is conditional on still holding the
+   * lease, so a worker whose lease expired and was reassigned cannot overwrite the new owner's
+   * progress; it gets `lease lost` instead.
+   */
+  transition(auditId: string, to: JobStatus, patch: { stageCheckpoint?: string; lastError?: string } = {}, owner?: string) {
     const job = this.getJob(auditId);
     if (!job) throw new Error(`job ${auditId} missing`);
     assertTransition(job.status, to);
-    this.db
-      .prepare(`UPDATE audit_jobs SET status=?, stage_checkpoint=COALESCE(?, stage_checkpoint), last_error=COALESCE(?, last_error), updated_at=? WHERE audit_id=?`)
-      .run(to, patch.stageCheckpoint ?? null, patch.lastError ?? null, now(), auditId);
+    const sql = `UPDATE audit_jobs SET status=?, stage_checkpoint=COALESCE(?, stage_checkpoint), last_error=COALESCE(?, last_error), updated_at=? WHERE audit_id=?`;
+    const params: (string | number | null)[] = [to, patch.stageCheckpoint ?? null, patch.lastError ?? null, now(), auditId];
+    const { changes } = owner === undefined
+      ? this.db.prepare(sql).run(...params)
+      : this.db.prepare(`${sql} AND (lease_owner IS NULL OR lease_owner = ?)`).run(...params, owner);
+    if (Number(changes) === 0) throw new Error('lease lost');
   }
 
   appendEvent(auditId: string, kind: string, payload: unknown) {
