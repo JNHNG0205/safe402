@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0",
+  "tool": { "name": "mini", "version": "0.0.1", "functionId": "mini" },
+  "runtime": { "type": "node", "entrypoint": "server.js" },
+  "capabilities": { "network": [], "filesystem": [], "process": [], "wallet": [] }
+}
