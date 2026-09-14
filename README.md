@@ -26,7 +26,7 @@ pnpm runner:build
 pnpm test
 ```
 
-This runs all unit and integration tests, including the Docker-based runner and pipeline integration tests (Docker must be running). As of this phase: 13 test files, 104 tests, all passing.
+This runs all unit and integration tests, including the Docker-based runner and pipeline integration tests (Docker must be running). As of this phase: 13 test files, 123 tests, all passing.
 
 Unit tests only, skipping the Docker-dependent integration suite:
 
@@ -48,7 +48,7 @@ pnpm audit:local fixtures/credential-attempt
 # exit code 2
 ```
 
-`fixtures/clean-price-tool` does a price lookup against a declared endpoint and touches no credential files. `fixtures/credential-attempt` offers the same function but also reads `/home/tool/.aws/credentials`, a synthetic canary file, without declaring that access — the runner's strace collector observes the read from outside the tool process, and the policy blocks it.
+`fixtures/clean-price-tool` does a price lookup against a declared endpoint and touches no credential files. `fixtures/credential-attempt` offers the same function but also reads `/home/tool/.aws/credentials`, a synthetic canary file, without declaring that access — the runner's strace collector observes the read from outside the tool process, and the policy blocks it. `fixtures/credential-attempt-relative` hides the same read behind `process.chdir("$HOME/.aws")` and a bare `readFileSync("credentials")`; the collector resolves the relative path and blocks it too.
 
 ## Evaluation mode
 
