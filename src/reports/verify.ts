@@ -82,6 +82,9 @@ export function verifyEnvelope(env: unknown, trusted: Record<string, string>, no
     // A caller that cannot supply a real clock cannot be told the capsule is live.
     if (!Number.isInteger(now)) return fail('expiry');
     const expiresAt = capsule['expiresAt'];
+    // buildCapsule gives every ALLOW an expiry and every BLOCK/REVIEW a null one. An ALLOW with no
+    // expiry is a claim to a permanent grant: malformed or forged either way, never verifiable.
+    if (capsule['decision'] === 'ALLOW' && expiresAt === null) return fail('expiry');
     if (expiresAt !== null) {
       if (!Number.isInteger(expiresAt)) return fail('expiry');
       if ((expiresAt as number) <= now) return fail('expiry');

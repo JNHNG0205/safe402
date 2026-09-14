@@ -308,6 +308,21 @@ describe('signing and verification', () => {
     });
   });
 
+  it('rejects an ALLOW that never expires', () => {
+    // buildCapsule gives every ALLOW an expiry; an envelope whose ALLOW has none is claiming a
+    // permanent grant, so it must fail the expiry check rather than verify forever.
+    const { bundle, allowed, issuer, trusted } = build();
+    const capsule = { ...allowed.capsule, expiresAt: null };
+    const { report, reportHash } = buildReport({
+      reportId: 'r3', capsule, capsuleHash: hashCanonical('safe402/capsule/v1', capsule), manifest, evidence: bundle,
+      evidenceReference: 'local:x',
+    });
+    const env = signReport(report, reportHash, 'issuer-1', issuer.privateKey);
+    expect(verifyEnvelope(env, trusted, 2000)).toMatchObject({
+      ok: false, failedCheck: 'expiry', checks: ['schema', 'reportHash', 'issuer', 'signature', 'capsuleHash'],
+    });
+  });
+
   it('ignores publication references, which live outside the signed body', () => {
     const { env, trusted } = build();
     const published = structuredClone(env);

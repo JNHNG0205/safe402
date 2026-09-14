@@ -4,7 +4,11 @@ import type { Policy } from '../domain/types.js';
 export class PolicyError extends Error {}
 
 const host = z.string().refine((h) => h === '*' || /^[a-z0-9.-]+$/.test(h), 'hostname must be lowercase');
-const path = z.string().refine((p) => p === '*' || p.startsWith('/'), 'path must be absolute or *');
+// Mirrors the manifest schema: a traversal segment lets an allowlist entry normalize to somewhere
+// the operator never intended, so it is rejected at parse time on both sides of the comparison.
+const path = z.string()
+  .refine((p) => p === '*' || p.startsWith('/'), 'path must be absolute or *')
+  .refine((p) => !p.split('/').includes('..'), 'path traversal not allowed');
 
 export const policySchema = z
   .object({

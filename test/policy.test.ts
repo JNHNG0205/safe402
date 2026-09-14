@@ -18,6 +18,16 @@ describe('policy', () => {
     expect(() => parsePolicy({ ...base, authorization: { ttlSeconds: 10 } })).toThrow(PolicyError);
     expect(() => parsePolicy({ ...base, rules: { ...base.rules, network: { allowedHosts: ['Bad Host'] } } })).toThrow(PolicyError);
   });
+  it('rejects an allowedPaths entry containing a traversal segment', () => {
+    const base = loadPolicyFile(FILE) as any;
+    // Same rule as the manifest schema: `/home/tool/.cache/../.aws` normalizes outside the path the
+    // operator thought they were allowing, so it must never enter a policy at all.
+    expect(() => parsePolicy({ ...base, rules: { ...base.rules, filesystem: { allowedPaths: ['/home/tool/.cache/../.aws'] } } })).toThrow(PolicyError);
+    expect(() => parsePolicy({ ...base, rules: { ...base.rules, filesystem: { allowedPaths: ['/home/tool/..'] } } })).toThrow(PolicyError);
+    expect(() => parsePolicy({ ...base, rules: { ...base.rules, filesystem: { allowedPaths: ['/home/tool/.cache'] } } })).not.toThrow();
+    // `..` only as a whole segment: a directory legitimately named `..cache` still parses.
+    expect(() => parsePolicy({ ...base, rules: { ...base.rules, filesystem: { allowedPaths: ['/home/tool/..cache'] } } })).not.toThrow();
+  });
   it('commitment depends on salt and policy', () => {
     const p = loadPolicyFile(FILE);
     const s1 = newSalt(); const s2 = newSalt();
