@@ -13,6 +13,8 @@ import { verifyEnvelope } from '../../src/reports/verify.js';
 import { issuerFromSeed } from '../../src/reports/sign.js';
 import { processJob, runWorkerOnce } from '../../worker/pipeline.js';
 import type { Config } from '../../src/config.js';
+import type { ArtifactRunner } from '../../worker/pipeline.js';
+import type { RunResult } from '../../runner/harness/run.js';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 let docker = true; try { execFileSync('docker', ['info'], { stdio: 'ignore' }); } catch { docker = false; }
@@ -59,5 +61,56 @@ describe.skipIf(!docker)('pipeline', () => {
     expect(repo2.getJob('a_restart')!.status).toBe('COMPLETED'); expect(repo2.getJob('a_restart')!.attempts).toBe(2);
     const repo3 = new JobRepo(openDb(config.dbPath));
     expect((repo3.getCapsuleByAudit('a_restart')!.capsule as any).decision).toBe('ALLOW');
+  });
+});
+
+/** A runner that takes its time but needs no Docker, so the lease behaviour is testable on its own. */
+function slowRunner(delayMs: number, onStart: () => void, onEnd: () => void): ArtifactRunner {
+  return async ({ artifact, profile }): Promise<RunResult> => {
+    onStart();
+    await new Promise((r) => setTimeout(r, delayMs));
+    onEnd();
+    return {
+      observations: [],
+      coverage: { profileId: profile.profileId, testsRequested: profile.tests.map((t) => t.testId), testsCompleted: profile.tests.map((t) => t.testId), testsSkipped: [], unsupported: [], collectorErrors: [], timedOut: false, baselineOpens: 7, staticIncomplete: false, fixtureVersion: artifact.artifactHash },
+      exitCode: 0, timedOut: false, collectorError: null, stderr: '', testResults: {},
+    };
+  };
+}
+
+describe('pipeline leases', () => {
+  it('heartbeats through a long run so the lease is never swept mid-TESTING', async () => {
+    const { config, repo, enqueue } = setup();
+    enqueue('fixtures/clean-price-tool', 'a_slow');
+    const job = repo.claimNext('w')!;
+    let running = false; const beatsDuringRun: string[] = [];
+    const realHeartbeat = repo.heartbeat.bind(repo);
+    repo.heartbeat = ((auditId: string, owner: string, at?: number) => {
+      if (running) beatsDuringRun.push(owner);
+      return at === undefined ? realHeartbeat(auditId, owner) : realHeartbeat(auditId, owner, at);
+    }) as JobRepo['heartbeat'];
+    await processJob({ repo, config, owner: 'w', heartbeatMs: 40, runner: slowRunner(300, () => { running = true; }, () => { running = false; }) }, job);
+    expect(beatsDuringRun.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(beatsDuringRun)).toEqual(new Set(['w']));
+    expect(repo.getJob('a_slow')!.status).toBe('COMPLETED');
+    expect(repo.listEvents('a_slow').filter((e) => e.kind === 'stage').map((e) => (e.payload as { to: string }).to)).toEqual(['SCANNING', 'TESTING', 'EVALUATING', 'COMPLETED']);
+  });
+
+  it('a worker whose lease was swept mid-run records the error instead of failing a job it no longer owns', async () => {
+    const { config, repo, enqueue } = setup();
+    enqueue('fixtures/clean-price-tool', 'a_lost');
+    const job = repo.claimNext('w-old')!;
+    // The run outlives the lease: the sweep requeues the job for another worker, then this run fails.
+    const stolen: ArtifactRunner = async () => {
+      expect(repo.sweepExpiredLeases(job.lease_expires_at! + 1)).toBe(1);
+      throw new Error('runner exploded');
+    };
+    await processJob({ repo, config, owner: 'w-old', runner: stolen }, job);
+    const after = repo.getJob('a_lost')!;
+    expect(after.status).toBe('QUEUED'); expect(after.last_error).toBeNull(); expect(after.lease_owner).toBeNull();
+    const errors = repo.listEvents('a_lost').filter((e) => e.kind === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.payload).toEqual({ message: 'runner exploded', unrecorded: 'lease lost' });
+    expect(repo.claimNext('w-new')!.audit_id).toBe('a_lost');
   });
 });

@@ -1,11 +1,12 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/db.js';
-import { JobRepo } from '../src/jobs/repo.js';
+import { JobRepo, LEASE_SECONDS } from '../src/jobs/repo.js';
 import { assertTransition, TransitionError } from '../src/jobs/stateMachine.js';
 
+const ROOT = join(import.meta.dirname, '..');
 const tmpDb = () => join(mkdtempSync(join(tmpdir(), 's402db-')), 'x.db');
 const job = (id: string) => ({ auditId: id, artifactHash: 'sha256:a', policyId: 'p', subjectId: 's', profileId: 'no-network-v1', profileHash: 'sha256:h' });
 
@@ -38,18 +39,41 @@ describe('JobRepo', () => {
     repo.createJob(job('a1'));
     expect(repo.claimNext('w1', 1000)!.lease_owner).toBe('w1');
     repo.transition('a1', 'SCANNING', { stageCheckpoint: 'artifact' }, 'w1');
-    repo.sweepExpiredLeases(1061);
-    expect(repo.claimNext('w2', 5000)!.lease_owner).toBe('w2');
+    repo.sweepExpiredLeases(1000 + LEASE_SECONDS + 1);
+    expect(repo.claimNext('w2', 1000 + LEASE_SECONDS + 2)!.lease_owner).toBe('w2');
     expect(() => repo.transition('a1', 'SCANNING', { stageCheckpoint: 'stale' }, 'w1')).toThrow('lease lost');
     expect(repo.getJob('a1')!.status).toBe('PREPARING');
     expect(repo.getJob('a1')!.stage_checkpoint).toBeNull();
     repo.transition('a1', 'SCANNING', { stageCheckpoint: 'artifact' }, 'w2');
     expect(repo.getJob('a1')!.status).toBe('SCANNING');
   });
+  it('outlives the runner deadline and extends only for the lease owner', () => {
+    const profile = JSON.parse(readFileSync(join(ROOT, 'runner/profiles/no-network-v1.json'), 'utf8')) as { deadlineMs: number };
+    expect(LEASE_SECONDS).toBeGreaterThan(profile.deadlineMs / 1000);
+    const repo = new JobRepo(openDb(tmpDb()));
+    repo.createJob(job('a1'));
+    expect(repo.claimNext('w1', 1000)!.lease_expires_at).toBe(1000 + LEASE_SECONDS);
+    repo.heartbeat('a1', 'w1', 2000);
+    expect(repo.getJob('a1')!.lease_expires_at).toBe(2000 + LEASE_SECONDS);
+    repo.heartbeat('a1', 'w2', 9000);
+    expect(repo.getJob('a1')!.lease_expires_at).toBe(2000 + LEASE_SECONDS);
+    expect(repo.sweepExpiredLeases(2000 + LEASE_SECONDS - 1)).toBe(0);
+  });
+  it('refuses a stale worker after a sweep requeued the job, so retries survive', () => {
+    const repo = new JobRepo(openDb(tmpDb()));
+    repo.createJob(job('a1'));
+    repo.claimNext('w1', 1000);
+    expect(repo.sweepExpiredLeases(1000 + LEASE_SECONDS + 1)).toBe(1);
+    expect(repo.getJob('a1')!.lease_owner).toBeNull();
+    expect(() => repo.transition('a1', 'FAILED', { lastError: 'stale' }, 'w1')).toThrow('lease lost');
+    const after = repo.getJob('a1')!;
+    expect(after.status).toBe('QUEUED'); expect(after.last_error).toBeNull();
+    expect(repo.claimNext('w2', 9000)!.audit_id).toBe('a1');
+  });
   it('sweeps expired leases back to QUEUED until attempts exhausted', () => {
     const repo = new JobRepo(openDb(tmpDb()));
     repo.createJob(job('a1'));
-    for (let i = 1; i <= 3; i++) { const c = repo.claimNext('w', 1000 * i)!; expect(c.attempts).toBe(i); repo.sweepExpiredLeases(1000 * i + 61); }
+    for (let i = 1; i <= 3; i++) { const c = repo.claimNext('w', 1000 * i)!; expect(c.attempts).toBe(i); repo.sweepExpiredLeases(1000 * i + LEASE_SECONDS + 1); }
     expect(repo.getJob('a1')!.status).toBe('FAILED');
     expect(repo.claimNext('w', 99999)).toBeNull();
   });

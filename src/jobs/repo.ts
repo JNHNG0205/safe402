@@ -19,7 +19,12 @@ export interface JobRow {
   updated_at: number;
 }
 
-const LEASE_SECONDS = 60;
+/**
+ * A lease must outlive the longest a worker can legitimately be busy — the runner's own deadline
+ * (120 s in no-network-v1) plus container setup, parsing, and signing — or a slow-but-healthy run
+ * is swept mid-TESTING and a second worker starts a duplicate Docker run over the same obs dir.
+ */
+export const LEASE_SECONDS = 180;
 const MAX_ATTEMPTS = 3;
 const ACTIVE: JobStatus[] = ['PREPARING', 'SCANNING', 'TESTING', 'EVALUATING'];
 const now = () => Math.floor(Date.now() / 1000);
@@ -87,9 +92,10 @@ export class JobRepo {
   }
 
   /**
-   * Moves a job to `to`. When `owner` is supplied the write is conditional on still holding the
-   * lease, so a worker whose lease expired and was reassigned cannot overwrite the new owner's
-   * progress; it gets `lease lost` instead.
+   * Moves a job to `to`. When `owner` is supplied the write requires that exact lease owner, so a
+   * worker whose lease expired cannot overwrite the new owner's progress — and cannot mark a job
+   * FAILED after a sweep requeued it (lease_owner NULL) while it still has retries left. Either
+   * way it gets `lease lost` instead.
    */
   transition(auditId: string, to: JobStatus, patch: { stageCheckpoint?: string; lastError?: string } = {}, owner?: string) {
     const job = this.getJob(auditId);
@@ -99,7 +105,7 @@ export class JobRepo {
     const params: (string | number | null)[] = [to, patch.stageCheckpoint ?? null, patch.lastError ?? null, now(), auditId];
     const { changes } = owner === undefined
       ? this.db.prepare(sql).run(...params)
-      : this.db.prepare(`${sql} AND (lease_owner IS NULL OR lease_owner = ?)`).run(...params, owner);
+      : this.db.prepare(`${sql} AND lease_owner = ?`).run(...params, owner);
     if (Number(changes) === 0) throw new Error('lease lost');
   }
 

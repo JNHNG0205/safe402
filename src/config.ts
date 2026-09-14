@@ -9,6 +9,8 @@ export function loadConfig(root = process.cwd()): Config {
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   const seed = process.env.SAFE402_ISSUER_PRIVATE_KEY;
   if (!seed || /replace-with/.test(seed)) throw new Error('SAFE402_ISSUER_PRIVATE_KEY missing');
+  // Checked here rather than at signing time, so a malformed key fails before an audit runs.
+  if (!/^(0x)?[0-9a-fA-F]{64}$/.test(seed)) throw new Error('SAFE402_ISSUER_PRIVATE_KEY must be a 32-byte hex seed (64 hex characters, optional 0x prefix)');
   const dataDir = resolve(root, 'data');
   return {
     dataDir,

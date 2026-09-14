@@ -9,13 +9,21 @@ import { loadProfile, runArtifact } from '../runner/harness/run.js';
 import type { JobRepo, JobRow } from '../src/jobs/repo.js';
 import type { Config } from '../src/config.js';
 
-export interface PipelineContext { repo: JobRepo; config: Config; owner: string; straceBin?: string }
+/** The isolated run step, injectable so lease behaviour can be tested without Docker. */
+export type ArtifactRunner = typeof runArtifact;
+
+/** Comfortably under the lease, so a run that outlives one interval still keeps the lease alive. */
+const HEARTBEAT_MS = 20_000;
+
+export interface PipelineContext { repo: JobRepo; config: Config; owner: string; straceBin?: string; runner?: ArtifactRunner; heartbeatMs?: number }
 
 /**
  * Runs one claimed job through PREPARING → SCANNING → TESTING → EVALUATING → COMPLETED.
  * Every transition is lease-scoped to `ctx.owner`, so a worker whose lease was reassigned
  * stops here instead of overwriting the new owner's work. Any thrown error ends the job in
- * FAILED with `last_error` and an `error` event; nothing is ever decided from a caught error.
+ * FAILED with `last_error` and an `error` event — unless the lease has moved on, in which case the
+ * error is recorded and the status is left to whoever owns the job now. Nothing is ever decided
+ * from a caught error.
  */
 export async function processJob(ctx: PipelineContext, job: JobRow): Promise<void> {
   const { repo, config } = ctx; const id = job.audit_id;
@@ -29,7 +37,16 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
     const scan = scanArtifact(artifact);
     repo.appendEvent(id, 'findings', { count: scan.findings.length });
     step('TESTING', 'static-complete');
-    const run = await runArtifact({ artifact, profile, auditId: id, dataDir: config.dataDir, ...(ctx.straceBin ? { straceBin: ctx.straceBin } : {}) });
+    // The run is the only step that can outlast a lease, so beat through it: without this a slow
+    // but healthy run is swept mid-TESTING and a second worker starts a duplicate container over
+    // the same observation directory.
+    const beat = setInterval(() => { try { repo.heartbeat(id, ctx.owner); } catch { /* the sweep will decide */ } }, ctx.heartbeatMs ?? HEARTBEAT_MS);
+    let run;
+    try {
+      run = await (ctx.runner ?? runArtifact)({ artifact, profile, auditId: id, dataDir: config.dataDir, ...(ctx.straceBin ? { straceBin: ctx.straceBin } : {}) });
+    } finally {
+      clearInterval(beat);
+    }
     repo.appendEvent(id, 'runtime', { observations: run.observations.length, timedOut: run.timedOut, collectorError: run.collectorError, testsCompleted: run.coverage.testsCompleted });
     step('EVALUATING', 'runtime-complete');
     const { bundle, evidenceHash } = buildEvidence({ auditId: id, artifactHash: artifact.artifactHash, executionProfileHash: profileHash, run, findings: scan.findings, staticIncomplete: scan.staticIncomplete, analyzerVersion: ANALYZER_VERSION });
@@ -44,10 +61,17 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
     const issuer = issuerFromSeed(config.issuerSeedHex);
     repo.saveReport(reportId, id, capsuleHash, reportHash, signReport(report, reportHash, config.issuerId, issuer.privateKey));
     repo.appendEvent(id, 'decision', { decision: result.decision, reasonCodes: result.reasonCodes, reportId });
-    repo.transition(id, 'COMPLETED', { stageCheckpoint: 'report-signed' }, ctx.owner);
+    step('COMPLETED', 'report-signed');
   } catch (e) {
     const msg = (e as Error).message;
-    try { repo.transition(id, 'FAILED', { lastError: msg }, ctx.owner); } catch { /* already terminal, or the lease moved on */ }
+    try {
+      repo.transition(id, 'FAILED', { lastError: msg }, ctx.owner);
+    } catch (t) {
+      // The lease is gone (or the job is already terminal): this worker no longer speaks for the
+      // job, so it records what happened and leaves the status to whoever owns it now.
+      repo.appendEvent(id, 'error', { message: msg, unrecorded: (t as Error).message });
+      return;
+    }
     repo.appendEvent(id, 'error', { message: msg });
   }
 }
