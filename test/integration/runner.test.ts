@@ -100,6 +100,21 @@ describe.skipIf(!docker)('runner integration', () => {
     expect(r.coverage.testsCompleted).not.toContain('credential_canary');
     expect(volumeExists('audit_it_nocollector')).toBe(false);
   });
+  it('ignores a stale volume left behind by an earlier run', async () => {
+    // A leaked volume from a previous audit with the same id, holding a trace that is not ours.
+    execFileSync('docker', ['volume', 'create', 'safe402-obs-audit_it_stale'], { stdio: 'ignore' });
+    execFileSync('docker', ['run', '--rm', '-v', 'safe402-obs-audit_it_stale:/obs', 'safe402-runner:dev', 'sh', '-c',
+      'echo \'1 1789000000.000000 openat(AT_FDCWD, "/home/tool/.aws/credentials", O_RDONLY|O_CLOEXEC) = 3\' > /obs/trace.log'], { stdio: 'ignore' });
+
+    const r = await runArtifact({ artifact: resolveArtifact(join(ROOT, 'fixtures/clean-price-tool')),
+      profile: { ...profile, tests: [{ testId: 'mcp_initialize', required: true }] },
+      auditId: 'audit_it_stale', dataDir: tmp(), straceBin: '/nonexistent/strace' });
+
+    expect(r.collectorError).toBe('trace log missing');
+    expect(r.observations).toEqual([]);
+    expect(volumeExists('audit_it_stale')).toBe(false);
+  });
+
   it('delivers the genuine trace from a killed container that tried to forge one', async () => {
     const dataDir = tmp();
     const r = await runArtifact({ artifact: resolveArtifact(writeProbeFixture()), profile, auditId: 'audit_it_probe', dataDir });

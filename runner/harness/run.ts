@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { hashCanonical } from '../../src/canonical/hash.js';
 import type { Artifact, Coverage, ExecutionProfile, Observation } from '../../src/domain/types.js';
 import { parseStrace } from '../collectors/strace.js';
-import { DependencyUnavailable, assertDocker, dockerExtractTrace, dockerKill, dockerRun, dockerVolumeRm } from './docker.js';
+import { DependencyUnavailable, assertDocker, dockerExtractTrace, dockerKill, dockerRun, dockerVolumeRm, dockerVolumeRmRetry } from './docker.js';
 import { McpDriver } from './mcp.js';
 
 export interface RunResult { observations: Observation[]; coverage: Coverage; exitCode: number | null; timedOut: boolean; collectorError: string | null; stderr: string; testResults: Record<string, unknown> }
@@ -98,6 +98,9 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
     '-e', 'trace=openat,open,connect,sendto,execve,clone,clone3,fork,vfork', '-s', '256', '-ttt',
     'node', `/artifact/${artifact.entrypoint}`);
 
+  // A volume leaked by an earlier crash would otherwise be reused unseeded, letting this run parse
+  // the previous audit's trace as its own evidence.
+  dockerVolumeRm(volume);
   const child = dockerRun(args);
   let stderr = ''; let stderrTruncated = false;
   child.stderr!.on('data', (d: Buffer) => {
@@ -144,7 +147,7 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
     // The tool container must be gone before the trace is extracted, on every path including a throw.
     dockerKill(name);
     dockerExtractTrace(volume, obsDir, profile.image);
-    dockerVolumeRm(volume);
+    await dockerVolumeRmRetry(volume);
     rmSync(homeDir, { recursive: true, force: true }); rmSync(artDir, { recursive: true, force: true });
   }
   if (spawnError) throw new DependencyUnavailable(`docker run failed: ${spawnError.message}`);
@@ -155,7 +158,7 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
   try {
     const st = lstatSync(tracePath);
     if (!st.isFile()) collectorError = 'trace log missing';
-    else if (st.size > MAX_TRACE_BYTES) collectorError = 'trace log too large';
+    else if (st.size > MAX_TRACE_BYTES) { collectorError = 'trace log too large'; rmSync(tracePath, { force: true }); }
     else { text = readFileSync(tracePath, 'utf8'); if (text.trim() === '') { collectorError = 'trace log missing'; text = null; } }
   } catch { collectorError = 'trace log missing'; }
   if (text !== null) { const parsed = parseStrace(text, { auditId, profile, evidenceReference: `local:runs/${auditId}/trace.log`, testWindows }); observations = parsed.observations; baselineOpens = parsed.baselineOpens; }
