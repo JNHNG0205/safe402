@@ -1,6 +1,7 @@
 import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative, sep } from 'node:path';
 import { z } from 'zod';
+import { ArtifactError, resolveArtifact } from '../../src/artifacts/resolve.js';
 import { hashCanonical } from '../../src/canonical/hash.js';
 import type { Artifact, Coverage, ExecutionProfile, Observation } from '../../src/domain/types.js';
 import { parseStrace } from '../collectors/strace.js';
@@ -68,19 +69,29 @@ function copyHashedFiles(root: string, dest: string): void {
   }
 }
 
-export async function runArtifact(opts: { artifact: Artifact; profile: ExecutionProfile; auditId: string; dataDir: string; straceBin?: string }): Promise<RunResult> {
+export async function runArtifact(opts: { artifact: Artifact; profile: ExecutionProfile; auditId: string; dataDir: string; attempt?: number; straceBin?: string }): Promise<RunResult> {
   const { artifact, profile, auditId, dataDir } = opts;
+  // Every attempt gets its own container and volume names, so a retry can never adopt a previous
+  // attempt's leftover observation volume as its own evidence.
+  const attempt = Math.max(1, Math.trunc(opts.attempt ?? 1));
   assertDocker();
   const runDir = join(dataDir, 'runs', auditId);
   const artDir = join(runDir, 'artifact'); const homeDir = join(runDir, 'home'); const obsDir = join(runDir, 'obs');
   rmSync(runDir, { recursive: true, force: true });
   mkdirSync(obsDir, { recursive: true }); mkdirSync(homeDir, { recursive: true });
   copyHashedFiles(artifact.sourceDir, artDir);
+  // What executes must be what was audited. The canonical artifact struct is root-independent, so
+  // re-resolving the copy that is about to be mounted catches any drift between resolution and the
+  // run - a mutated source directory, or a copy that lost or gained a file.
+  let copyHash: string;
+  try { copyHash = resolveArtifact(artDir).artifactHash; }
+  catch (e) { rmSync(runDir, { recursive: true, force: true }); throw new ArtifactError(`artifact could not be re-resolved at run time: ${(e as Error).message}`); }
+  if (copyHash !== artifact.artifactHash) { rmSync(runDir, { recursive: true, force: true }); throw new ArtifactError('artifact hash mismatch at run time'); }
   for (const c of profile.canaries) { const p = join(homeDir, c.path.replace(/^\/home\/tool\/?/, '')); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, CANARY_CONTENT[c.path] ?? 'canary\n'); }
   chmodSync(homeDir, 0o777);
 
-  const name = `safe402-${auditId}`;
-  const volume = `safe402-obs-${auditId}`;
+  const name = `safe402-${auditId}-${attempt}`;
+  const volume = `safe402-obs-${auditId}-${attempt}`;
   const strace = opts.straceBin ?? 'strace';
   // /obs is a named volume seeded from the image's root-only 0700 directory: the tool cannot read,
   // write, or unlink the trace, and no host directory is writable from inside the tool container.
@@ -161,7 +172,7 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
     else if (st.size > MAX_TRACE_BYTES) { collectorError = 'trace log too large'; rmSync(tracePath, { force: true }); }
     else { text = readFileSync(tracePath, 'utf8'); if (text.trim() === '') { collectorError = 'trace log missing'; text = null; } }
   } catch { collectorError = 'trace log missing'; }
-  if (text !== null) { const parsed = parseStrace(text, { auditId, profile, evidenceReference: `local:runs/${auditId}/trace.log`, testWindows }); observations = parsed.observations; baselineOpens = parsed.baselineOpens; }
+  if (text !== null) { const parsed = parseStrace(text, { auditId, profile, evidenceReference: `local:runs/${auditId}/obs/trace.log`, testWindows }); observations = parsed.observations; baselineOpens = parsed.baselineOpens; }
   if (collectorError) { const i = completed.indexOf('credential_canary'); if (i >= 0) { completed.splice(i, 1); skipped.push({ testId: 'credential_canary', reason: collectorError }); } }
 
   const unsupported = ['environment-variable reads after process start are not observable by strace', 'hostnames of failed DNS lookups are not recovered in this profile'];

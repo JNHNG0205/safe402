@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -14,7 +14,7 @@ const tmp = (prefix = 's402-') => { const d = mkdtempSync(join(tmpdir(), prefix)
 afterAll(() => { for (const d of temps) rmSync(d, { recursive: true, force: true }); });
 const containerExists = (name: string) => execFileSync('docker', ['ps', '-a', '--format', '{{.Names}}'], { encoding: 'utf8' }).split('\n').includes(name);
 /** Filtered by the audit's own volume name so a concurrently running suite cannot flake this. */
-const volumeExists = (auditId: string) => execFileSync('docker', ['volume', 'ls', '-q', '--filter', `name=safe402-obs-${auditId}`], { encoding: 'utf8' }).trim() !== '';
+const volumeExists = (auditId: string, attempt = 1) => execFileSync('docker', ['volume', 'ls', '-q', '--filter', `name=safe402-obs-${auditId}-${attempt}`], { encoding: 'utf8' }).trim() !== '';
 const traceOf = (dataDir: string, auditId: string) => readFileSync(join(dataDir, 'runs', auditId, 'obs/trace.log'), 'utf8');
 
 /** A fixture whose tools/call tries to destroy the trace and reports what it can see of /artifact. */
@@ -94,6 +94,17 @@ describe.skipIf(!docker)('runner integration', () => {
     expect(r.coverage.testsCompleted).toContain('get_price_call');
     expect(volumeExists('audit_it_clean')).toBe(false);
   });
+  it('refuses to run a directory whose content no longer hashes to the audited artifact', async () => {
+    // The gap between resolveArtifact and the run is a real window: whatever is copied into the
+    // container must re-hash to the artifact the audit is about, or nothing runs at all.
+    const dir = tmp('s402-drift-');
+    for (const f of ['manifest.json', 'server.js', 'package.json']) copyFileSync(join(ROOT, 'fixtures/clean-price-tool', f), join(dir, f));
+    const artifact = resolveArtifact(dir);
+    writeFileSync(join(dir, 'server.js'), readFileSync(join(dir, 'server.js'), 'utf8') + '\n// injected after the hash was taken\n');
+    await expect(runArtifact({ artifact, profile, auditId: 'audit_it_drift', dataDir: tmp() }))
+      .rejects.toThrow(/artifact hash mismatch at run time/);
+    expect(containerExists('safe402-audit_it_drift-1')).toBe(false);
+  });
   it('reports collector failure when strace is missing', async () => {
     const r = await runArtifact({ artifact: resolveArtifact(join(ROOT, 'fixtures/clean-price-tool')), profile, auditId: 'audit_it_nocollector', dataDir: tmp(), straceBin: '/nonexistent/strace' });
     expect(r.collectorError).toBe('trace log missing');
@@ -102,8 +113,8 @@ describe.skipIf(!docker)('runner integration', () => {
   });
   it('ignores a stale volume left behind by an earlier run', async () => {
     // A leaked volume from a previous audit with the same id, holding a trace that is not ours.
-    execFileSync('docker', ['volume', 'create', 'safe402-obs-audit_it_stale'], { stdio: 'ignore' });
-    execFileSync('docker', ['run', '--rm', '-v', 'safe402-obs-audit_it_stale:/obs', 'safe402-runner:dev', 'sh', '-c',
+    execFileSync('docker', ['volume', 'create', 'safe402-obs-audit_it_stale-1'], { stdio: 'ignore' });
+    execFileSync('docker', ['run', '--rm', '-v', 'safe402-obs-audit_it_stale-1:/obs', 'safe402-runner:dev', 'sh', '-c',
       'echo \'1 1789000000.000000 openat(AT_FDCWD, "/home/tool/.aws/credentials", O_RDONLY|O_CLOEXEC) = 3\' > /obs/trace.log'], { stdio: 'ignore' });
 
     const r = await runArtifact({ artifact: resolveArtifact(join(ROOT, 'fixtures/clean-price-tool')),
@@ -140,7 +151,7 @@ describe.skipIf(!docker)('runner integration', () => {
     expect(trace).not.toContain('/fabricated');
     expect(trace).toMatch(/"\/obs\/trace\.log".*= -1 EACCES/);
     expect(volumeExists('audit_it_probe')).toBe(false);
-    expect(containerExists('safe402-audit_it_probe')).toBe(false);
+    expect(containerExists('safe402-audit_it_probe-1')).toBe(false);
   });
   it('kills on deadline', async () => {
     const dataDir = tmp();
@@ -148,7 +159,7 @@ describe.skipIf(!docker)('runner integration', () => {
     expect(r.timedOut).toBe(true);
     expect(r.coverage.testsCompleted).toEqual([]);
     expect(r.coverage.testsSkipped.map((s) => s.reason)).toEqual(['deadline', 'deadline']);
-    expect(containerExists('safe402-audit_it_deadline')).toBe(false);
+    expect(containerExists('safe402-audit_it_deadline-1')).toBe(false);
     expect(volumeExists('audit_it_deadline')).toBe(false);
     // The kill path yields either the collector's own trace or nothing at all - never tool-authored bytes.
     expect(r.collectorError === null || r.collectorError === 'trace log missing').toBe(true);

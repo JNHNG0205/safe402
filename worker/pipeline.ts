@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { resolveArtifact } from '../src/artifacts/resolve.js';
 import { decide } from '../src/domain/decide.js';
 import { buildEvidence } from '../src/evidence/bundle.js';
 import { authorizationKey, buildCapsule } from '../src/reports/capsule.js';
@@ -33,6 +34,11 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
     const pol = repo.getPolicy(job.policy_id); if (!pol) throw new Error('policy missing');
     const { profile, profileHash } = loadProfile(config.profilePath);
     if (profileHash !== job.profile_hash) throw new Error('profile hash mismatch');
+    // The stored artifact row is a claim about a directory on disk; re-resolve it so the static
+    // scan, and everything downstream, runs over content that still hashes to the audited artifact.
+    // The runner repeats this check on the copy it is about to mount.
+    const onDisk = resolveArtifact(artifact.sourceDir);
+    if (onDisk.artifactHash !== artifact.artifactHash) throw new Error('artifact hash mismatch: source directory no longer matches the audited artifact');
     step('SCANNING', 'artifact-verified');
     const scan = scanArtifact(artifact);
     repo.appendEvent(id, 'findings', { count: scan.findings.length });
@@ -43,7 +49,7 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
     const beat = setInterval(() => { try { repo.heartbeat(id, ctx.owner); } catch { /* the sweep will decide */ } }, ctx.heartbeatMs ?? HEARTBEAT_MS);
     let run;
     try {
-      run = await (ctx.runner ?? runArtifact)({ artifact, profile, auditId: id, dataDir: config.dataDir, ...(ctx.straceBin ? { straceBin: ctx.straceBin } : {}) });
+      run = await (ctx.runner ?? runArtifact)({ artifact, profile, auditId: id, dataDir: config.dataDir, attempt: job.attempts, ...(ctx.straceBin ? { straceBin: ctx.straceBin } : {}) });
     } finally {
       clearInterval(beat);
     }
@@ -57,7 +63,7 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
       decision: result.decision, reasonCodes: result.reasonCodes, issuedAt: Math.floor(Date.now() / 1000), ttlSeconds: pol.policy.authorization.ttlSeconds, authorizationSequence: repo.nextAuthorizationSequence(key) });
     repo.saveCapsule(capsuleHash, id, capsule, key);
     const reportId = `report_${randomBytes(8).toString('hex')}`;
-    const { report, reportHash } = buildReport({ reportId, capsule, capsuleHash, manifest: artifact.manifest, evidence: bundle, evidenceReference: `local:runs/${id}/trace.log` });
+    const { report, reportHash } = buildReport({ reportId, capsule, capsuleHash, manifest: artifact.manifest, evidence: bundle, evidenceReference: `local:runs/${id}/obs/trace.log` });
     const issuer = issuerFromSeed(config.issuerSeedHex);
     repo.saveReport(reportId, id, capsuleHash, reportHash, signReport(report, reportHash, config.issuerId, issuer.privateKey));
     repo.appendEvent(id, 'decision', { decision: result.decision, reasonCodes: result.reasonCodes, reportId });

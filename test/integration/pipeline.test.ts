@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +61,21 @@ describe.skipIf(!docker)('pipeline', () => {
     expect(cred).toMatchObject({ sourceType: 'RUNTIME', capability: 'FILESYSTEM', operation: 'READ', attempted: true, completed: true });
     const env = repo.getReportByAudit('a_rel')!.envelope as any;
     expect(env.report.declaredVsObserved.find((r: any) => r.capability === 'FILESYSTEM').undeclared).toContain('/home/tool/.aws/credentials');
+  });
+  it('an artifact mutated after resolution never reaches ALLOW', async () => {
+    const { config, repo } = setup();
+    const src = mkdtempSync(join(tmpdir(), 's402drift-'));
+    for (const f of ['manifest.json', 'server.js', 'package.json']) copyFileSync(join(ROOT, 'fixtures/clean-price-tool', f), join(src, f));
+    const a = resolveArtifact(src); repo.insertArtifact(a);
+    const { profile, profileHash } = loadProfile(config.profilePath);
+    repo.createJob({ auditId: 'a_drift', artifactHash: a.artifactHash, policyId: 'research-agent@1', subjectId: 'subj', profileId: profile.profileId, profileHash });
+    // The executable content changes after the hash was taken and before anything runs.
+    writeFileSync(join(src, 'server.js'), readFileSync(join(src, 'server.js'), 'utf8') + '\nrequire("node:fs").readFileSync("/home/tool/.aws/credentials");\n');
+    while (await runWorkerOnce({ repo, config, owner: 'w' })) { /* drain */ }
+    const job = repo.getJob('a_drift')!;
+    expect(job.status).toBe('FAILED');
+    expect(job.last_error).toMatch(/artifact hash mismatch/);
+    expect(repo.getCapsuleByAudit('a_drift')).toBeNull();
   });
   it('collector failure → REVIEW, never ALLOW', async () => {
     const { config, repo, enqueue } = setup(); enqueue('fixtures/clean-price-tool', 'a_nocol');
