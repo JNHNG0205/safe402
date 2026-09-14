@@ -26,7 +26,7 @@ pnpm runner:build
 pnpm test
 ```
 
-This runs all unit and integration tests, including the Docker-based runner and pipeline integration tests (Docker must be running). As of this phase: 13 test files, 99 tests, all passing.
+This runs all unit and integration tests, including the Docker-based runner and pipeline integration tests (Docker must be running). As of this phase: 13 test files, 104 tests, all passing.
 
 Unit tests only, skipping the Docker-dependent integration suite:
 
