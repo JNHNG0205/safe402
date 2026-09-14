@@ -81,4 +81,48 @@ describe('parseStrace', () => {
     expect(() => parseStrace(trace, ctx)).not.toThrow();
     expect(parseStrace(trace, ctx).observations).toEqual([]);
   });
+  it('resolves an AT_FDCWD-relative open against the cwd set by chdir', () => {
+    const trace = [
+      '12    1757800000.100000 execve("/usr/local/bin/node", ["node", "/artifact/server.js"], 0x7ffd /* 3 vars */) = 0',
+      '12    1757800001.200000 chdir("/home/tool/.aws") = 0',
+      '12    1757800001.300000 openat(AT_FDCWD, "credentials", O_RDONLY|O_CLOEXEC) = 24',
+    ].join('\n');
+    const { observations, baselineOpens } = parseStrace(trace, ctx);
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({ capability: 'FILESYSTEM', operation: 'READ', target: '/home/tool/.aws/credentials', attempted: true, permitted: true, completed: true });
+    expect(baselineOpens).toBe(0);
+  });
+  it('resolves a dirfd-relative open through the fd map, and a child pid inherits the parent cwd', () => {
+    const trace = [
+      '12    1757800000.100000 execve("/usr/local/bin/node", ["node", "/artifact/server.js"], 0x7ffd /* 3 vars */) = 0',
+      '12    1757800001.100000 openat(AT_FDCWD, "/home/tool/.aws", O_RDONLY|O_DIRECTORY|O_CLOEXEC) = 3',
+      '12    1757800001.150000 clone(child_stack=0x7f, flags=CLONE_VM|SIGCHLD) = 31',
+      '31    1757800001.200000 openat(3, "credentials", O_RDONLY|O_CLOEXEC) = 9',
+    ].join('\n');
+    const { observations, baselineOpens } = parseStrace(trace, ctx);
+    const cred = observations.find((o) => o.target === '/home/tool/.aws/credentials')!;
+    expect(cred).toMatchObject({ capability: 'FILESYSTEM', operation: 'READ', completed: true });
+    // The directory open itself is under /home/tool, so it is evidence too, never baseline noise.
+    expect(baselineOpens).toBe(0);
+  });
+  it('emits an unresolved target rather than dropping an open it cannot place', () => {
+    const trace = [
+      '12    1757800000.100000 execve("/usr/local/bin/node", ["node", "/artifact/server.js"], 0x7ffd /* 3 vars */) = 0',
+      '12    1757800001.300000 openat(77, "credentials", O_RDONLY|O_CLOEXEC) = 9',
+    ].join('\n');
+    const { observations, baselineOpens } = parseStrace(trace, ctx);
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({ capability: 'FILESYSTEM', operation: 'READ', target: 'unresolved:credentials', attempted: true, completed: true });
+    expect(baselineOpens).toBe(0);
+  });
+  it('decodes octal escapes so an escaped canary path cannot slip past', () => {
+    const canaryProfile: ExecutionProfile = { ...profile, canaries: [{ path: '/srv/secret.json', kind: 'credential' }] };
+    const trace = [
+      '12    1757800000.100000 execve("/usr/local/bin/node", ["node", "/artifact/server.js"], 0x7ffd /* 3 vars */) = 0',
+      '12    1757800001.300000 openat(AT_FDCWD, "/srv/\\163ecret.json", O_RDONLY|O_CLOEXEC) = 9',
+    ].join('\n');
+    const { observations } = parseStrace(trace, { ...ctx, profile: canaryProfile });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({ capability: 'FILESYSTEM', operation: 'READ', target: '/srv/secret.json', completed: true });
+  });
 });

@@ -95,7 +95,7 @@ export async function runArtifact(opts: { artifact: Artifact; profile: Execution
     '-v', `${artDir}:/artifact:ro`, '-v', `${homeDir}:/home/tool`];
   for (const [k, v] of Object.entries(profile.env)) args.push('-e', `${k}=${v}`);
   args.push(profile.image, strace, '-f', '-u', profile.toolUser, '-o', '/obs/trace.log',
-    '-e', 'trace=openat,open,connect,sendto,execve,clone,clone3,fork,vfork', '-s', '256', '-ttt',
+    '-e', 'trace=openat,open,connect,sendto,execve,chdir,fchdir,clone,clone3,fork,vfork', '-s', '256', '-ttt',
     'node', `/artifact/${artifact.entrypoint}`);
 
   // A volume leaked by an earlier crash would otherwise be reused unseeded, letting this run parse

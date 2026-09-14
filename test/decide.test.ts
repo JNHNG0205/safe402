@@ -192,4 +192,42 @@ describe('decide', () => {
     expect(a).toEqual(b);
     expect(JSON.stringify(i)).toBe(before);
   });
+
+  it('an unresolved filesystem target is missing coverage, not a clean run', () => {
+    // The collector could not place the open, so the engine cannot say what was read. Unattributable
+    // is REVIEW: it is never treated as "nothing happened", and never as a named undeclared access.
+    const r = decide(input({ observations: [obs({ target: 'unresolved:credentials' })] }));
+    expect(r.decision).toBe('REVIEW');
+    expect(r.reasonCodes).toContain('UNRESOLVED_FILE_TARGET');
+    expect(r.reasonCodes).not.toContain('UNDECLARED_FILE_ACCESS');
+    expect(r.reasonCodes).not.toContain('ALL_CHECKS_SATISFIED');
+  });
+
+  it('blockUndeclaredCapabilities blocks a completed read outside the declared filesystem paths', () => {
+    const r = decide(input({ observations: [obs({ target: '/home/tool/.ssh/id_rsa' })] }));
+    expect(r.decision).toBe('BLOCK');
+    expect(r.reasonCodes).toContain('UNDECLARED_FILE_ACCESS');
+    const w = decide(input({ observations: [obs({ operation: 'WRITE', target: '/home/tool/.ssh/authorized_keys' })] }));
+    expect(w.decision).toBe('BLOCK');
+    expect(w.reasonCodes).toContain('UNDECLARED_FILE_ACCESS');
+  });
+
+  it('with blockUndeclaredCapabilities false the undeclared-file rule contributes no code', () => {
+    const pol = structuredClone(policy); pol.rules.blockUndeclaredCapabilities = false;
+    const r = decide({ ...input({ observations: [obs({ target: '/home/tool/.ssh/id_rsa' })] }), policy: pol });
+    expect(r.decision).toBe('ALLOW');
+    expect(r.reasonCodes).not.toContain('UNDECLARED_FILE_ACCESS');
+  });
+
+  it('a declared path covers a completed read under it', () => {
+    const m = structuredClone(manifest); m.capabilities.filesystem = ['/home/tool/.cache'];
+    const pol = structuredClone(policy); pol.rules.filesystem.allowedPaths = ['/home/tool/.cache'];
+    const r = decide({ ...input({ observations: [obs({ target: '/home/tool/.cache/prices.json' })] }), manifest: m, policy: pol });
+    expect(r.decision).toBe('ALLOW');
+  });
+
+  it('an attempted-but-denied undeclared read is not exfiltration and does not block', () => {
+    const r = decide(input({ observations: [obs({ target: '/home/tool/.ssh/id_rsa', permitted: false, completed: false })] }));
+    expect(r.decision).toBe('ALLOW');
+  });
 });

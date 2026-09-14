@@ -127,6 +127,11 @@ export class JobRepo {
     this.db.prepare(`INSERT OR IGNORE INTO evidence_bundles VALUES (?,?,?,?)`).run(evidenceHash, auditId, JSON.stringify(bundle), now());
   }
 
+  getEvidenceByAudit(auditId: string): unknown | null {
+    const r = this.db.prepare(`SELECT bundle_json FROM evidence_bundles WHERE audit_id=? ORDER BY created_at DESC LIMIT 1`).get(auditId) as any;
+    return r ? JSON.parse(r.bundle_json) : null;
+  }
+
   nextAuthorizationSequence(key: string): number {
     return (
       ((this.db.prepare(`SELECT COALESCE(MAX(authorization_sequence),0) AS m FROM decision_capsules WHERE authorization_key=?`).get(key) as any).m as number) + 1

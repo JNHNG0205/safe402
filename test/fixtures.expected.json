@@ -1,4 +1,5 @@
 {
   "fixtures/clean-price-tool": { "decision": "ALLOW", "mustObserve": [] },
-  "fixtures/credential-attempt": { "decision": "BLOCK", "mustObserve": [{ "capability": "FILESYSTEM", "operation": "READ", "target": "/home/tool/.aws/credentials", "completed": true }] }
+  "fixtures/credential-attempt": { "decision": "BLOCK", "mustObserve": [{ "capability": "FILESYSTEM", "operation": "READ", "target": "/home/tool/.aws/credentials", "completed": true }] },
+  "fixtures/credential-attempt-relative": { "decision": "BLOCK", "mustObserve": [{ "capability": "FILESYSTEM", "operation": "READ", "target": "/home/tool/.aws/credentials", "completed": true }] }
 }

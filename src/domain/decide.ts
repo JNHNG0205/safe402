@@ -25,6 +25,10 @@ function pathAllowed(allowed: string[], p: string): boolean {
     return a === '*' || n === a || n.startsWith(a.endsWith('/') ? a : a + '/');
   });
 }
+/** The collector's fail-closed marker for an open it could not place; see runner/collectors/strace.ts. */
+function isUnattributable(target: string): boolean {
+  return target.startsWith('unresolved:');
+}
 function hostAllowed(allowed: string[], host: string): boolean {
   return allowed.includes('*') || allowed.includes(host);
 }
@@ -76,6 +80,13 @@ export function decide({ evidence, policy, manifest, profile, bindings }: Decide
         add('CREDENTIAL_ACCESS_ATTEMPTED');
       }
     }
+    // The policy's own undeclared-capability rule, independent of the canary set: a file the tool
+    // actually read or wrote, that its manifest never declared, is an undeclared access. Targets the
+    // collector could not place (`unresolved:`) are deliberately excluded — they name no file, so
+    // they cannot be judged against the allowlist and are handled as missing coverage in step 3.
+    if (policy.rules.blockUndeclaredCapabilities && o.capability === 'FILESYSTEM' && o.completed
+      && (o.operation === 'READ' || o.operation === 'WRITE') && !isUnattributable(o.target)
+      && !pathAllowed(manifest.capabilities.filesystem, o.target)) { critical = true; add('UNDECLARED_FILE_ACCESS'); }
     if (o.capability === 'PROCESS' && o.operation === 'SPAWN' && o.attempted && !policy.rules.process.allowSpawn) { critical = true; add('PROCESS_SPAWN_FORBIDDEN'); }
     if (o.capability === 'WALLET') { critical = true; add('WALLET_ACCESS_OBSERVED'); }
     if (o.capability === 'NETWORK' && o.operation === 'CONNECT' && o.completed) {
@@ -92,6 +103,9 @@ export function decide({ evidence, policy, manifest, profile, bindings }: Decide
   // the tool did nothing. Silence is missing evidence, never a clean run.
   if (cov.baselineOpens === 0 && evidence.observations.length === 0) { incomplete = true; add('COLLECTOR_FAILURE'); }
   if (cov.timedOut) { incomplete = true; add('RUNTIME_TIMEOUT'); }
+  // A relative or dirfd-relative open the collector could not resolve means some file access is
+  // unaccounted for. Unknown is never clean: it is coverage the collector failed to produce.
+  if (evidence.observations.some((o) => o.sourceType === 'RUNTIME' && o.capability === 'FILESYSTEM' && isUnattributable(o.target))) { incomplete = true; add('UNRESOLVED_FILE_TARGET'); }
   const required = profile.tests.filter((t) => t.required).map((t) => t.testId);
   if (required.some((t) => !cov.testsCompleted.includes(t))) { incomplete = true; add('REQUIRED_TEST_INCOMPLETE'); }
   if (cov.staticIncomplete && policy.rules.requireCompleteCoverage) { incomplete = true; add('STATIC_COVERAGE_INCOMPLETE'); }

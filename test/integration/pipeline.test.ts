@@ -45,6 +45,23 @@ describe.skipIf(!docker)('pipeline', () => {
     expect(verifyEnvelope(env, { iss: issuerFromSeed(SEED).publicKeyHex }, Math.floor(Date.now() / 1000)).ok).toBe(true);
     expect(repo.getJob('a_clean')!.status).toBe('COMPLETED');
   });
+  it('a credential read reached through chdir and a relative path still blocks', async () => {
+    // Regression: the collector used to drop every non-absolute open as baseline noise, so this
+    // fixture — the same theft as credential-attempt, behind process.chdir — returned ALLOW.
+    const { config, repo, enqueue } = setup();
+    enqueue('fixtures/credential-attempt-relative', 'a_rel');
+    while (await runWorkerOnce({ repo, config, owner: 'w' })) { /* drain */ }
+    const cap = repo.getCapsuleByAudit('a_rel')!.capsule as any;
+    expect(cap.decision).toBe('BLOCK');
+    expect(cap.reasonCodes).toContain('CREDENTIAL_ACCESS_OBSERVED');
+    // The reason code must come from a real RUNTIME observation naming the absolute canary path,
+    // not from a static finding or the fixture's own name.
+    const bundle = repo.getEvidenceByAudit('a_rel')! as any;
+    const cred = bundle.observations.find((o: any) => o.target === '/home/tool/.aws/credentials');
+    expect(cred).toMatchObject({ sourceType: 'RUNTIME', capability: 'FILESYSTEM', operation: 'READ', attempted: true, completed: true });
+    const env = repo.getReportByAudit('a_rel')!.envelope as any;
+    expect(env.report.declaredVsObserved.find((r: any) => r.capability === 'FILESYSTEM').undeclared).toContain('/home/tool/.aws/credentials');
+  });
   it('collector failure → REVIEW, never ALLOW', async () => {
     const { config, repo, enqueue } = setup(); enqueue('fixtures/clean-price-tool', 'a_nocol');
     const job = repo.claimNext('w')!; await processJob({ repo, config, owner: 'w', straceBin: '/nonexistent/strace' }, job);

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveArtifact } from '../src/artifacts/resolve.js';
 
 const ROOT = join(import.meta.dirname, '..');
-for (const dir of ['fixtures/clean-price-tool', 'fixtures/credential-attempt']) {
+for (const dir of ['fixtures/clean-price-tool', 'fixtures/credential-attempt', 'fixtures/credential-attempt-relative']) {
   describe(dir, () => {
     it('resolves to an artifact with a declared network host', () => {
       const a = resolveArtifact(join(ROOT, dir));
