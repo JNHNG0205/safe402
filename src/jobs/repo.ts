@@ -1,6 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Artifact, JobStatus, Policy } from '../domain/types.js';
+import type { Artifact, DecisionCapsule, JobStatus, Policy } from '../domain/types.js';
+import { buildCapsule } from '../reports/capsule.js';
 import { assertTransition } from './stateMachine.js';
+
+/** Everything a capsule needs except the sequence, which only the database can allocate. */
+export type CapsuleBase = Omit<Parameters<typeof buildCapsule>[0], 'authorizationSequence'>;
 
 export interface JobRow {
   audit_id: string;
@@ -34,7 +38,7 @@ export class JobRepo {
 
   insertArtifact(a: Artifact) {
     this.db
-      .prepare(`INSERT OR IGNORE INTO artifacts VALUES (?,?,?,?,?,?,?,?)`)
+      .prepare(`INSERT OR IGNORE INTO artifacts (artifact_hash, executable_digest, entrypoint, manifest_json, file_count, byte_size, source_dir, created_at) VALUES (?,?,?,?,?,?,?,?)`)
       .run(a.artifactHash, a.executableDigest, a.entrypoint, JSON.stringify(a.manifest), a.fileCount, a.byteSize, a.sourceDir, now());
   }
 
@@ -54,7 +58,7 @@ export class JobRepo {
 
   upsertPolicy(p: { policyId: string; name: string; version: number; policy: Policy; salt: string; commitment: string }) {
     this.db
-      .prepare(`INSERT OR IGNORE INTO policy_versions VALUES (?,?,?,?,?,?,?)`)
+      .prepare(`INSERT OR IGNORE INTO policy_versions (policy_id, name, version, policy_json, salt, commitment, created_at) VALUES (?,?,?,?,?,?,?)`)
       .run(p.policyId, p.name, p.version, JSON.stringify(p.policy), p.salt, p.commitment, now());
   }
 
@@ -111,7 +115,7 @@ export class JobRepo {
 
   appendEvent(auditId: string, kind: string, payload: unknown) {
     const seq = (this.db.prepare(`SELECT COALESCE(MAX(sequence),0)+1 AS s FROM job_events WHERE audit_id=?`).get(auditId) as any).s as number;
-    this.db.prepare(`INSERT INTO job_events VALUES (?,?,?,?,?)`).run(auditId, seq, kind, JSON.stringify(payload), now());
+    this.db.prepare(`INSERT INTO job_events (audit_id, sequence, kind, payload_json, created_at) VALUES (?,?,?,?,?)`).run(auditId, seq, kind, JSON.stringify(payload), now());
   }
 
   listEvents(auditId: string): { sequence: number; kind: string; payload: unknown; created_at: number }[] {
@@ -124,7 +128,7 @@ export class JobRepo {
   }
 
   saveEvidence(evidenceHash: string, auditId: string, bundle: unknown) {
-    this.db.prepare(`INSERT OR IGNORE INTO evidence_bundles VALUES (?,?,?,?)`).run(evidenceHash, auditId, JSON.stringify(bundle), now());
+    this.db.prepare(`INSERT OR IGNORE INTO evidence_bundles (evidence_hash, audit_id, bundle_json, created_at) VALUES (?,?,?,?)`).run(evidenceHash, auditId, JSON.stringify(bundle), now());
   }
 
   getEvidenceByAudit(auditId: string): unknown | null {
@@ -140,13 +144,37 @@ export class JobRepo {
 
   saveCapsule(capsuleHash: string, auditId: string, capsule: { decision: string; authorizationSequence?: number }, authorizationKey: string) {
     const seq = capsule.authorizationSequence ?? this.nextAuthorizationSequence(authorizationKey);
+    this.insertCapsule(capsuleHash, auditId, capsule, authorizationKey, seq);
+  }
+
+  private insertCapsule(capsuleHash: string, auditId: string, capsule: { decision: string }, authorizationKey: string, seq: number) {
     this.db
-      .prepare(`INSERT OR IGNORE INTO decision_capsules VALUES (?,?,?,?,?,?,?)`)
+      .prepare(`INSERT OR IGNORE INTO decision_capsules (capsule_hash, audit_id, capsule_json, decision, authorization_key, authorization_sequence, created_at) VALUES (?,?,?,?,?,?,?)`)
       .run(capsuleHash, auditId, JSON.stringify(capsule), capsule.decision, authorizationKey, seq, now());
   }
 
+  /**
+   * Allocates the next sequence for `authorizationKey`, builds the capsule around it, and stores it
+   * in one `BEGIN IMMEDIATE` transaction. Read-then-write across two calls let two workers hand out
+   * the same sequence for the same subject/artifact/policy/profile lineage — two capsules claiming
+   * to be the same link in the authorization chain, with the sequence already baked into the hash.
+   */
+  saveCapsuleWithNextSequence(auditId: string, capsuleBase: CapsuleBase, authorizationKey: string): { capsule: DecisionCapsule; capsuleHash: string } {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const seq = this.nextAuthorizationSequence(authorizationKey);
+      const built = buildCapsule({ ...capsuleBase, authorizationSequence: seq });
+      this.insertCapsule(built.capsuleHash, auditId, built.capsule, authorizationKey, seq);
+      this.db.exec('COMMIT');
+      return built;
+    } catch (e) {
+      try { this.db.exec('ROLLBACK'); } catch { /* the transaction is already gone */ }
+      throw e;
+    }
+  }
+
   saveReport(reportId: string, auditId: string, capsuleHash: string, reportHash: string, envelope: unknown) {
-    this.db.prepare(`INSERT OR IGNORE INTO reports VALUES (?,?,?,?,?,?)`).run(reportId, auditId, capsuleHash, reportHash, JSON.stringify(envelope), now());
+    this.db.prepare(`INSERT OR IGNORE INTO reports (report_id, audit_id, capsule_hash, report_hash, envelope_json, created_at) VALUES (?,?,?,?,?,?)`).run(reportId, auditId, capsuleHash, reportHash, JSON.stringify(envelope), now());
   }
 
   getReportByAudit(auditId: string): { reportId: string; envelope: unknown } | null {

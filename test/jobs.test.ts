@@ -78,3 +78,40 @@ describe('JobRepo', () => {
     expect(repo.claimNext('w', 99999)).toBeNull();
   });
 });
+
+describe('schema migrations', () => {
+  it('stamps user_version 1 and is a no-op when an existing v1 database is reopened', () => {
+    const path = tmpDb();
+    const first = openDb(path);
+    expect((first.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1);
+    new JobRepo(first).createJob(job('a1'));
+
+    const second = openDb(path);
+    expect((second.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1);
+    // Reopening must not re-run a migration over live data.
+    expect(new JobRepo(second).getJob('a1')!.status).toBe('QUEUED');
+  });
+  it('refuses a database written by a newer build', () => {
+    const path = tmpDb();
+    openDb(path).exec('PRAGMA user_version = 99');
+    expect(() => openDb(path)).toThrow(/newer/);
+  });
+});
+
+describe('saveCapsuleWithNextSequence', () => {
+  const base = { auditId: 'a1', artifactHash: 'sha256:art', executionProfileHash: 'sha256:prof', evidenceHash: 'sha256:ev',
+    policyCommitment: 'sha256:pol', subjectId: 'subj', decision: 'ALLOW' as const, reasonCodes: ['ALL_CHECKS_SATISFIED' as const], issuedAt: 1000, ttlSeconds: 3600 };
+  it('allocates consecutive sequences under one transaction', () => {
+    const path = tmpDb(); const repo = new JobRepo(openDb(path));
+    const first = repo.saveCapsuleWithNextSequence('a1', base, 'key1');
+    const second = repo.saveCapsuleWithNextSequence('a1', { ...base, issuedAt: 2000 }, 'key1');
+    expect(first.capsule.authorizationSequence).toBe(1);
+    expect(second.capsule.authorizationSequence).toBe(2);
+    expect(repo.nextAuthorizationSequence('key1')).toBe(3);
+    expect(repo.nextAuthorizationSequence('key2')).toBe(1);
+    // The sequence is inside the hashed capsule, so two links in the chain cannot share a hash.
+    expect(first.capsuleHash).not.toBe(second.capsuleHash);
+    // Both rows were committed, not just built.
+    expect(new JobRepo(openDb(path)).nextAuthorizationSequence('key1')).toBe(3);
+  });
+});

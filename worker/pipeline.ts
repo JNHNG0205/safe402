@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { resolveArtifact } from '../src/artifacts/resolve.js';
 import { decide } from '../src/domain/decide.js';
 import { buildEvidence } from '../src/evidence/bundle.js';
-import { authorizationKey, buildCapsule } from '../src/reports/capsule.js';
+import { authorizationKey } from '../src/reports/capsule.js';
 import { buildReport } from '../src/reports/report.js';
 import { issuerFromSeed, signReport } from '../src/reports/sign.js';
 import { scanArtifact, ANALYZER_VERSION } from '../src/scanner/scan.js';
@@ -59,9 +59,10 @@ export async function processJob(ctx: PipelineContext, job: JobRow): Promise<voi
     repo.saveEvidence(evidenceHash, id, bundle);
     const result = decide({ evidence: bundle, policy: pol.policy, manifest: artifact.manifest, profile, bindings: { artifactHash: job.artifact_hash, executionProfileHash: job.profile_hash } });
     const key = authorizationKey(job.subject_id, artifact.artifactHash, pol.commitment, profileHash);
-    const { capsule, capsuleHash } = buildCapsule({ auditId: id, artifactHash: artifact.artifactHash, executionProfileHash: profileHash, evidenceHash, policyCommitment: pol.commitment, subjectId: job.subject_id,
-      decision: result.decision, reasonCodes: result.reasonCodes, issuedAt: Math.floor(Date.now() / 1000), ttlSeconds: pol.policy.authorization.ttlSeconds, authorizationSequence: repo.nextAuthorizationSequence(key) });
-    repo.saveCapsule(capsuleHash, id, capsule, key);
+    // Sequence allocation and the capsule write share one transaction: read-then-write across two
+    // calls lets two workers mint the same link in an authorization chain.
+    const { capsule, capsuleHash } = repo.saveCapsuleWithNextSequence(id, { auditId: id, artifactHash: artifact.artifactHash, executionProfileHash: profileHash, evidenceHash, policyCommitment: pol.commitment, subjectId: job.subject_id,
+      decision: result.decision, reasonCodes: result.reasonCodes, issuedAt: Math.floor(Date.now() / 1000), ttlSeconds: pol.policy.authorization.ttlSeconds }, key);
     const reportId = `report_${randomBytes(8).toString('hex')}`;
     const { report, reportHash } = buildReport({ reportId, capsule, capsuleHash, manifest: artifact.manifest, evidence: bundle, evidenceReference: `local:runs/${id}/obs/trace.log` });
     const issuer = issuerFromSeed(config.issuerSeedHex);
